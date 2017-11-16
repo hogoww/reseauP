@@ -1,0 +1,7 @@
+TP rendu par Pierre Misse Chanabier, sur la machine 1 de la salle 5.
+
+Tout est fonctionnel
+
+Le serveur se ferme à l'aide d'un envois de SIGINT (ctrl-c) pour pouvoir fermer correctement les connections aux clients, les fichiers ouverts, et rendre la mémoire (pour le principe).
+
+Pas de difficultées particulière.
