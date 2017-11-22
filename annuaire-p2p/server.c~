@@ -1,0 +1,36 @@
+#include <stdio.h>
+#include <stdlib.h>
+
+#include <sys/types.h>
+#include <sys/socket.h>
+#include <netinet/ip.h>
+#include <netinet/in.h>
+#include <arpa/inet.h>
+#include <netdb.h>
+
+#include <string.h>
+#include <errno.h>
+
+#define SIZE_BUFF 4096
+
+struct servParam{
+  /*TO DO*/
+};
+
+int main(int argc,char** argv){
+  int port=0;
+  if(argc>2){/*Check arguments*/
+    fprintf(stderr,"\n\nusage : ./serveur port\n\n");
+    exit(EXIT_SUCCESS);
+  }
+  if(argc==2){
+    port=htons(atoi(argv[1]));
+  }
+  else{
+    port=12000;/*Hard coded for debug purposes*/
+  }
+  
+  
+
+  return 0;
+}
