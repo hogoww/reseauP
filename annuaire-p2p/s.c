@@ -1,6 +1,3 @@
-//Misse Chanabier Pierre.
-//salle 6.05 machine 1.
-
 #include <unistd.h>
 #include <sys/socket.h>
 #include <string.h>
