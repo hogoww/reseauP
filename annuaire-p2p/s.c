@@ -34,7 +34,8 @@ void sigINT_handler(int signo){
       printf("\nClosing, have a nice day :)\n");
     }
     close(sockListen);
-    free(buffer);
+    if(buffer!=NULL)
+      free(buffer);
     exit(EXIT_SUCCESS);
   }
 }
@@ -80,77 +81,79 @@ int main(int argc,char** argv){
 
   while(1){//On commence la boucle infinie de reception, qui ne se termineras Proprement que sur un sigINT (ctrl + c)
     
-    
     printf("waiting for a new client\n");
     descClient=accept(sockListen,NULL,NULL);//acceptation du nouveau client (ou attente de celui ci, vu que accept est bloquant).
     if(-1==descClient){
-     fprintf(stderr,"problème accept : %s.\n",strerror(errno));
-      exit(1);
-    }
-
-    int c=fork();//Pour serveur concurent
-    if(c==-1){
-      fprintf(stderr,"problème fork : %s.\n",strerror(errno));
+      fprintf(stderr,"problème accept : %s.\n",strerror(errno));
       exit(EXIT_FAILURE);
     }
-    else{
-      if(c!=0){//Père
-	close(descClient);//Il ne s'occupe juste pas du client, et recommence à attendre pour le suivant
-      }
-      else{//Fils Vas envoyer le fichier (si il existe) au client.
-	close(sockListen);
-
-	printf("sending a file\n");
-
-	buffer=malloc(sizeof(char)*SIZE_BUFF);//Préparation du buffer d'envois
-	memset(buffer,0,SIZE_BUFF);
-
-	ssize_t res=recv(descClient,buffer,SIZE_BUFF,0);//Reception du nom
-	if(-1==res){
-	  fprintf(stderr,"problème recv fileName : %s.\n",strerror(errno));
-	  free(buffer);
-	  close(descClient);
-	  exit(EXIT_FAILURE);
-	}
-
-	int j=0;
-	while(buffer[j]!='\0'){//calcul de la longueur du nom
-	  j++;
-	}
     
-	char* fileName=malloc(sizeof(char)*j);
+    printf("sending a file\n");
+
+    buffer=malloc(sizeof(char)*SIZE_BUFF);//Préparation du buffer d'envois
+    memset(buffer,0,SIZE_BUFF);
     
-	ssize_t i=0;
-	while(buffer[i]!='\0'){
-	  fileName[i]=buffer[i];
-	  i++;
-	}
+    ssize_t res=recv(descClient,buffer,SIZE_BUFF,0);//Reception du nom
+    if(-1==res){
+      fprintf(stderr,"problème recv fileName : %s.\n",strerror(errno));
+      free(buffer);
+      close(descClient);
+      exit(EXIT_FAILURE);
+    }
+
+    int j=0;
+    while(buffer[j]!='\0'){//calcul de la longueur du nom
+      j++;
+    }
+    
+    char* fileName=malloc(sizeof(char)*j);
+    
+    ssize_t i=0;
+    while(buffer[i]!='\0'){
+      fileName[i]=buffer[i];
+      i++;
+    }
     
     
-	printf("\n%s\n",fileName);//Notification sur la sortie standards du nom du fichier à envoyer
+    printf("\n%s\n",fileName);//Notification sur la sortie standards du nom du fichier à envoyer
       
-	fileToSend=fopen(fileName,"r");//Ouverture du fichier.
-	if(fileToSend==NULL){//Si le fichier n'existe pas, le fils s'arrète.
-	  fprintf(stderr,"file failed to open : %s.\n",strerror(errno));
-	  close(descClient);
-	  free(buffer);
-	  remove(fileName);//On retire le fichier vide nouvellement créé.
-	  exit(EXIT_FAILURE);
+    fileToSend=fopen(fileName,"r");//Ouverture du fichier.
+    if(fileToSend==NULL){//Si le fichier n'existe pas, le fils s'arrète.
+      fprintf(stderr,"file failed to open : %s.\n",strerror(errno));
+      close(descClient);
+      free(buffer);
+      buffer=NULL;
+      remove(fileName);//On retire le fichier vide nouvellement créé.
+      continue;
+    }
+	
+    int c;
+    while(1){//sinon il envoit le fichier.
+      i=0;
+      while(i<SIZE_BUFF){//On remplis le buffer.
+	c=fgetc(fileToSend);
+	buffer[i]=c;
+	if(feof(fileToSend)){//Jusqu'à rencontrer la fin du fichier.
+	  break;
 	}
-	    
-	while(1){//sinon il envoit le fichier.
-	  i=0;
-	  while(i<SIZE_BUFF){//On remplis le buffer.
-	    c=fgetc(fileToSend);
-	    buffer[i]=c;
-	    if(feof(fileToSend)){//Jusqu'à rencontrer la fin du fichier.
-	      break;
-	    }
-	    i++;
-	  }
+	i++;
+      }
 
 
-	  ssize_t res=send(descClient,buffer,i,0);//Et on l'envois, jusqu'à la taille maximale, ou la fin du fichier
+      ssize_t res=send(descClient,buffer,i,0);//Et on l'envois, jusqu'à la taille maximale, ou la fin du fichier
+      if(-1==res){
+	fprintf(stderr,"problème send : %s.\n",strerror(errno));
+	close(descClient);
+	free(buffer);
+	fclose(fileToSend);
+	exit(EXIT_FAILURE);
+      }
+      
+      
+      if(feof(fileToSend)){//fin du fichier atteinte, on a finis.
+	if(i!=0){
+
+	  ssize_t res=send(descClient,buffer,0,0);//Et on l'envois, jusqu'à la taille maximale, ou la fin du fichier
 	  if(-1==res){
 	    fprintf(stderr,"problème send : %s.\n",strerror(errno));
 	    close(descClient);
@@ -158,30 +161,16 @@ int main(int argc,char** argv){
 	    fclose(fileToSend);
 	    exit(EXIT_FAILURE);
 	  }
-
-	  if(feof(fileToSend)){//fin du fichier atteinte, on a finis.
-
-	    res=send(descClient,buffer,0,0);
-	    if(-1==res){
-	      fprintf(stderr,"problème send : %s.\n",strerror(errno));
-	      close(descClient);
-	      free(buffer);
-	      fclose(fileToSend);
-	      exit(EXIT_FAILURE);
-	    }
-
-	    break;
-	  }
 	}
-	printf("done sending a file\n");
-	close(descClient);
-	exit(EXIT_SUCCESS);
+	break;
       }
     }
+    free(buffer);
+    buffer=NULL;
+    printf("done sending a file\n");
+    close(descClient);
   }
 
-  //Personne n'arrive ici:
-  //Le père se termine par un SIGINT
-  //Le fils s'arrète après avoir envoyé son fichier.
-  return 1;
+  //N'est pas supposé arrivé
+  exit(EXIT_FAILURE);
 }

@@ -1,6 +1,3 @@
-//Misse Chanabier Pierre.
-//salle 6.05 machine 1.
-
 #include <sys/socket.h>
 #include <string.h>
 #include <errno.h>
@@ -109,6 +106,7 @@ int main(int argc,char** argv){
     }
 
   }
+
   if(som){//Output du nombre d'octect reçu
     printf("%d octets received\n",som);
   }
