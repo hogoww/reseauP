@@ -22,6 +22,10 @@
 #define SIZE_BUFF 4096
 #define SERV_ADDRESS "127.0.0.1"
 
+#define LEAVING '1'
+#define COMING '2'
+#define REFRESH '3'
+
 
 struct servParam{
   int i;
@@ -37,28 +41,31 @@ int ConnectToServ(int port);
 void DisconnectFromServ(int sock);
 
 /*interaction Annuaire - pair*/
-void DisAuServeurQueJeSuisPresent(int port);
-void DisAuServeurQueJeQuitte(int port);
+void DisAuServeurQueJeSuisPresent(int port,char* pseudo,int size_P);
+void DisAuServeurQueJeQuitte(int port,char* pseudo,int size_P);
 void RefreshThatList(int port);/*Todo*/
+
+void QueryTypeServ(int serv,char type);
+
 
 /*Manipulation*/
 int LookForEnd(char s[],int size);
 char* ConvertBracketToStar(char s[],int fin,int size);
 
+
+
+
 int main(int argc,char** argv){
-  int port=0;
-  if(argc>2){/*Check arguments*/
-    fprintf(stderr,"\n\nusage : ./serveur [port]\n\n");
+  if(argc!=3){/*Check arguments*/
+    fprintf(stderr,"\n\nusage : ./p [Mon_Pseudo] [Port_Annuaire] \n\n");
     exit(EXIT_SUCCESS);
   }
-  if(argc==2){
-    port=htons(atoi(argv[1]));
-  }
-  else{
-    port=12000;/*Codé en dur pour debug*/
-  }
+  int port=htons(atoi(argv[2]));
+  char* pseudo=argv[1];
+  int size_P=LookForEnd(argv[1]);
+  
 
-  DisAuServeurQueJeSuisPresent(port);
+  DisAuServeurQueJeSuisPresent(port,pseudo,size_P);
   
   int done=0;
   do{
@@ -77,7 +84,7 @@ int main(int argc,char** argv){
 
   }while(!done);
   
-  DisAuServeurQueJeQuitte(port);
+  DisAuServeurQueJeQuitte(port,pseudo,size_P);
 
   return 0;
 }
@@ -131,8 +138,11 @@ char* ConvertBracketToStar(char s[],int end,int size){
 }
 
 
-void DisAuServeurQueJeSuisPresent(int port){
+void DisAuServeurQueJeSuisPresent(int port,char* pseudo,int size_P){
   int serv=ConnectToServ(port);
+
+
+  SendPseudo(serv,pseudo,size_P);
   
   DIR* d;
   struct dirent* dir;
@@ -141,14 +151,24 @@ void DisAuServeurQueJeSuisPresent(int port){
     while ((dir = readdir(d)) != NULL){
       int end=LookForEnd(dir->d_name,256);
       char* r=ConvertBracketToStar(dir->d_name,end,256);
-      ssize_t res=send(serv,r,end,0);//Envois du nom du fichier au serveur.
+      res=send(serv,r,end,0);//Envois du nom du fichier au serveur.
       if(-1==res){
 	fprintf(stderr,"DisAuServeurQueJeSuisPresent() problème envoie d'un nom de fichier : %s.\n",strerror(errno));
+	closedir(d);
 	DisconnectFromServ(port);
 	exit(EXIT_FAILURE);
       }
       free(r);
     }
+
+    res=send(serv,pseudo,0,0);//fin des fichiers à réceptionner.
+    if(-1==res){
+      fprintf(stderr,"problème DisAuServeurQueJeSuisPresent() envoie signal fin de fichier : %s.\n",strerror(errno));
+      closedir(d);
+      DisconnectFromServ(serv);    
+      exit(EXIT_FAILURE);
+    }
+
     closedir(d);
   }
   else{
@@ -161,22 +181,77 @@ void DisAuServeurQueJeSuisPresent(int port){
 }
   
 
-
-void DisAuServeurQueJeQuitte(int port){
-  int serv=ConnectToServ(port);
-  
-  char* e=malloc(sizeof(char)*10);/*Sequence simple pour indiquer qu'on s'en vas "lea v  ing"*/
-  e[0]='l';e[1]='e';e[2]='a';e[3]=' ';e[4]='v';e[5]=' ';e[6]=' ';e[7]='i';e[8]='n';e[9]='g';
-
-  ssize_t res=send(serv,e,10,0);//Envois du nom du fichier au serveur.
+void QueryTypeServ(int serv,char type){
+  char* e=malloc(sizeof(char));
+  *e=type;
+  ssize_t res=send(serv,pseudo,size_P,0);//Envois du nom du fichier au serveur.
   if(-1==res){
-    fprintf(stderr,"problème sendName : %s.\n",strerror(errno));
+    fprintf(stderr,"problème DisAuServeurQueJeQuitte() send pseudo : %s.\n",strerror(errno));
     DisconnectFromServ(serv);    
     exit(EXIT_FAILURE);
   }
-
   free(e);
+}
+
+void SendPseudo(int serv,char* pseudo,int size_PM){
+
+  ssize_t res=send(serv,pseudo,size_P,0);//Envois du nom du fichier au serveur.
+  if(-1==res){
+    fprintf(stderr,"problème DisAuServeurQueJeQuitte() send pseudo : %s.\n",strerror(errno));
+    DisconnectFromServ(serv);    
+    exit(EXIT_FAILURE);
+  }
+}
+
+void DisAuServeurQueJeQuitte(int port,char* pseudo,int size_P){
+  int serv=ConnectToServ(port);  
   
+  QueryTypeServ(serv,LEAVING);
+  SendPseudo(serv,pseudo,size_P);
+  
+  DisconnectFromServ(serv);
+}
+
+char* CharPToInt(char* c){
+  int end=LookForEnd(c);
+  char* b=malloc(sizeof(char));
+}
+
+
+void RefreshThatList(int port){
+  int serv=ConnectToServ(port);
+  QueryTypeServ(serv,REFRESH);
+
+  char* buffer=malloc(sizeof(char)*SIZE_BUFF);
+
+  ssize_t res=recv(serv,buffer,SIZE_BUFF,0);//Reception du nom
+  if(-1==res){
+    fprintf(stderr,"problème recv fileName : %s.\n",strerror(errno));
+    free(buffer);
+    DisconnectFromServ(serv);
+    exit(EXIT_FAILURE);
+  }
+  CharPToInt
+  
+  
+  
+  ssize_t res=recv(serv,buffer,SIZE_BUFF,0);//Reception du nom
+  if(-1==res){
+    fprintf(stderr,"problème recv fileName : %s.\n",strerror(errno));
+    free(buffer);
+    DisconnectFromServ(serv);
+    exit(EXIT_FAILURE);
+  }
+  
+  
+  ssize_t res=recv(descClient,buffer,SIZE_BUFF,0);//Reception du nom
+  if(-1==res){
+    fprintf(stderr,"problème recv fileName : %s.\n",strerror(errno));
+    free(buffer);
+    close(descClient);
+    exit(EXIT_FAILURE);
+  }
+
   DisconnectFromServ(serv);
 }
 
