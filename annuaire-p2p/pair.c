@@ -51,7 +51,7 @@ void QueryTypeServ(int serv,char type);
 /*Manipulation*/
 int LookForEnd(char s[],int size);
 char* ConvertBracketToStar(char s[],int fin,int size);
-
+int CharPToInt(char* c,int size);
 
 
 
@@ -62,8 +62,7 @@ int main(int argc,char** argv){
   }
   int port=htons(atoi(argv[2]));
   char* pseudo=argv[1];
-  int size_P=LookForEnd(argv[1]);
-  
+  int size_P=LookForEnd(argv[1],1000);/*Viens de bash, donc seras bien formaté*/
 
   DisAuServeurQueJeSuisPresent(port,pseudo,size_P);
   
@@ -128,12 +127,13 @@ char* ConvertBracketToStar(char s[],int end,int size){
     fprintf(stderr,"Convert char[] to char* failed\n");
   }
   int i=0;
-  char* res=malloc(sizeof(char)*end);
+  char* res=malloc(sizeof(char)*end+1);
   if(res==NULL){fprintf(stderr,"Problème Malloc : %s.\n",strerror(errno));exit(EXIT_FAILURE);}
   while(i<end){
     res[i]=s[i];
     i++;
   }
+  res[i]='\0';
   return res;
 }
 
@@ -193,7 +193,7 @@ void QueryTypeServ(int serv,char type){
   free(e);
 }
 
-void SendPseudo(int serv,char* pseudo,int size_PM){
+void SendPseudo(int serv,char* pseudo,int size_P){
 
   ssize_t res=send(serv,pseudo,size_P,0);//Envois du nom du fichier au serveur.
   if(-1==res){
@@ -212,9 +212,16 @@ void DisAuServeurQueJeQuitte(int port,char* pseudo,int size_P){
   DisconnectFromServ(serv);
 }
 
-char* CharPToInt(char* c){
-  int end=LookForEnd(c);
-  char* b=malloc(sizeof(char));
+int CharPToInt(char* c,int size){
+  int end=LookForEnd(c,size);
+  char* res=malloc(sizeof(char)*end+1);
+  int i=0;
+  while(i<end){
+    res[i]=c[i];
+    ++i;
+  }
+  res[i]='\0';
+  return atoi(res);
 }
 
 
@@ -231,11 +238,10 @@ void RefreshThatList(int port){
     DisconnectFromServ(serv);
     exit(EXIT_FAILURE);
   }
-  CharPToInt
+
+  CharPToInt(buffer,SIZE_BUFF);
   
-  
-  
-  ssize_t res=recv(serv,buffer,SIZE_BUFF,0);//Reception du nom
+  res=recv(serv,buffer,SIZE_BUFF,0);//Reception du nom
   if(-1==res){
     fprintf(stderr,"problème recv fileName : %s.\n",strerror(errno));
     free(buffer);
@@ -244,11 +250,11 @@ void RefreshThatList(int port){
   }
   
   
-  ssize_t res=recv(descClient,buffer,SIZE_BUFF,0);//Reception du nom
+  res=recv(serv,buffer,SIZE_BUFF,0);//Reception du nom
   if(-1==res){
     fprintf(stderr,"problème recv fileName : %s.\n",strerror(errno));
     free(buffer);
-    close(descClient);
+    DisconnectFromServ(serv);
     exit(EXIT_FAILURE);
   }
 
