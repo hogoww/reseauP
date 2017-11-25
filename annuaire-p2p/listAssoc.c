@@ -1,3 +1,7 @@
+#include <unistd.h>
+#include <stdlib.h>
+#include <string.h>
+
 struct list{
   char* v;
   struct list* next;
@@ -30,7 +34,7 @@ struct list* add_value_list(struct list *l,char* v){/*to be able to chain those 
   }
 
   l->next=malloc(sizeof(struct list));
-  l->next->val=v;
+  l->next->v=v;
   l->next->next=NULL;
   
   return l;
@@ -40,8 +44,8 @@ struct list* add_value_list(struct list *l,char* v){/*to be able to chain those 
 
 struct listAssoc{
   char* k;
-  struct list l;
-  struct listAssoc next;
+  struct list* l;
+  struct listAssoc* next;
 };
 
   
@@ -64,10 +68,11 @@ void delete_listAssoc(struct listAssoc* l){/*free only "next"s pointers*/
 }
 
 void delete_listAssoc_and_key_and_values(struct listAssoc* l){
+
   if(l->next!=NULL)
-    delete_listAssoc(l->next);
+    delete_listAssoc_and_key_and_values(l->next);
   if(l->l==NULL){
-    delete_list_and_value(l->l);
+    delete_list_and_values(l->l);
   }
   free(l->k);
   free(l);
@@ -78,7 +83,7 @@ struct listAssoc* get_key_listAssoc(struct listAssoc* l,char *key){
     return NULL;
   }
   else{
-    if(!strcmp(key,l->key))
+    if(!strcmp(key,l->k))
        return l;
     else{
       if(l->next==NULL){
@@ -92,6 +97,13 @@ struct listAssoc* get_key_listAssoc(struct listAssoc* l,char *key){
   }
 }
 
-struct listAssoc* addValue_to_key_list(char* key,char* value){
-  l->l.
+struct listAssoc* addValue_to_key_list(struct listAssoc* list,char* key,char* value){
+  struct listAssoc* l=get_key_listAssoc(list,key);
+  if(l->l==NULL){
+    l->l=make_list(value);
+  }
+  else{
+    add_value_list(l->l,value);
+  }
+  return list;
 }
