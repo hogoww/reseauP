@@ -33,7 +33,7 @@ void sigINT_handler(int signo){
     else{
       printf("\nClosing, have a nice day :)\n");
     }
-    close(sockListen);
+    if(close(sockListen)==-1)fprintf(stderr,"problème chdir : %s.\n",strerror(errno));
     if(buffer!=NULL)
       free(buffer);
     exit(EXIT_SUCCESS);
@@ -69,7 +69,12 @@ int main(int argc,char** argv){
   
   int checkBind=bind(sockListen,(struct sockaddr*)&addr,sizeof(struct sockaddr));//binding de la socket.
   if(-1==checkBind){
-    fprintf(stderr,"problème bind : %s.\n",strerror(errno));
+    if(errno==EADDRINUSE){
+      fprintf(stderr,"L'OS ne tolère pas que le port du socket soit identique entre deux exécutions proches.\nPour plus d'informations sur pourquoi cette attente : \n\nhttps://stackoverflow.com/questions/775638/using-so-reuseaddr-what-happens-to-previously-open-socket\n\n");
+    }
+    else{
+      fprintf(stderr,"problème bind : %d %s.\n",errno,strerror(errno));
+    }
     exit(EXIT_FAILURE);
   }
   
