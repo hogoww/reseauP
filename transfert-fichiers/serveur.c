@@ -20,7 +20,6 @@ FILE* fileToSend;
 char* buffer;
 
 
-
 void sigINT_handler(int signo){
 
   if(signo == SIGINT){

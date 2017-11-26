@@ -21,16 +21,11 @@
 /*Threading*/
 #include <pthread.h>
 
-/*API personnelles*/
+/*API/defines personnels*/
 #include "listAssoc.h"
+#include "shared_define.h"
 
-#define QUERY_BUFF_SIZE
-#define SIZE_BUFF 4096
 #define SERV_ADDRESS "127.0.0.1"
-
-#define LEAVING '1'
-#define COMING '2'
-#define REFRESH '3'
 
 
 struct servParam{
