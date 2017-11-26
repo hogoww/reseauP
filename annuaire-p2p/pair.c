@@ -18,6 +18,9 @@
 /*Manipulation dossier*/
 #include <dirent.h>
 
+/*API personnelles*/
+#include "listAssoc.h"
+
 #define QUERY_BUFF_SIZE
 #define SIZE_BUFF 4096
 #define SERV_ADDRESS "127.0.0.1"

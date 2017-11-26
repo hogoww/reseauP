@@ -1,3 +1,5 @@
+FLAGS = -Wall -ansi -pedantic -std=c99
 all:
-	#gcc -Wall -ansi -pedantic -std=c99 -o s server.c
-	gcc -Wall -ansi -pedantic -std=c99 -o p pair.c
+	gcc $(FLAGS) -c	listAssoc.c
+	#gcc $(FLAGS) -o s server.c
+	gcc $(FLAGS) -o p pair.c

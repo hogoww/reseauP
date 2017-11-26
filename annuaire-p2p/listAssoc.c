@@ -1,11 +1,4 @@
-#include <unistd.h>
-#include <stdlib.h>
-#include <string.h>
-
-struct list{
-  char* v;
-  struct list* next;
-};
+#include "listAssoc.h"
 
 
 struct list* make_list(char* val){
@@ -41,14 +34,8 @@ struct list* add_value_list(struct list *l,char* v){/*to be able to chain those 
 }
 
 
+/* ASSOCIATIVE LIST PART*/
 
-struct listAssoc{
-  char* k;
-  struct list* l;
-  struct listAssoc* next;
-};
-
-  
 
 struct listAssoc* make_ListAssoc(char* key){
   struct listAssoc* res=malloc(sizeof(struct listAssoc));
