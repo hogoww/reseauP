@@ -3,7 +3,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 
-/*includes fonctions reaseau*/
+/*includes fonctions reseau*/
 #include <sys/types.h>
 #include <sys/socket.h>
 #include <netinet/ip.h>
@@ -17,6 +17,9 @@
 
 /*Manipulation dossier*/
 #include <dirent.h>
+
+/*Threading*/
+#include <pthread.h>
 
 /*API personnelles*/
 #include "listAssoc.h"
@@ -34,22 +37,26 @@ struct servParam{
   int i;
   /*TO DO*/
 };
-
 /*get peer name*/
+
 /******************************************/
 /*MODIFY PARAMETER TO INCLUDE SERV ADDRESS*/
 /******************************************/
-/*Connection annuaire | pair*/
+
+/*Connection*/
 int ConnectToServ(int port);
 void DisconnectFromServ(int sock);
 
 /*interaction Annuaire - pair*/
 void DisAuServeurQueJeSuisPresent(int port);
 void DisAuServeurQueJeQuitte(int port);
-void RefreshThatList(int port);/*Todo*/
-
+struct listAssoc* RefreshThatList(int port);
 void QueryTypeServ(int serv,char type);
 
+/*Server side*/
+int createServerSocket(int port);
+void* IAMSERVEURNOW(void* param);
+void IAMNOLONGERSERVER();
 
 /*Manipulation*/
 int LookForEnd(char s[],int size);
@@ -67,12 +74,19 @@ int main(int argc,char** argv){
 
   DisAuServeurQueJeSuisPresent(port);
   
+  struct listAssoc* list=NULL;
+  list=RefreshThatList(port);
+
+  DisplayListAssoc(list);
   int done=0;
   do{
     printf("\nR -> Refresh la liste de l'annuaire\nQ-> Quite le reseau\n");
 
     switch(fgetc(stdin)){
     case 'R':
+      free(list);
+      list=RefreshThatList(port);
+      DisplayListAssoc(list);
       break;
     case 'Q':
       done=1;
@@ -83,6 +97,8 @@ int main(int argc,char** argv){
     }
 
   }while(!done);
+
+  free(list);
   
   DisAuServeurQueJeQuitte(port);
 
@@ -144,7 +160,7 @@ int getIntFromServ(int serv){
   ssize_t res=recv(serv,e,32,0);/*envoie le type de query sur le serv'*/
   if(-1==res){
     fprintf(stderr,"problème getIntFromServ : %s.\n",strerror(errno));
-    DisconnectFromServ(serv);
+    DisconnectFromServ(serv);sd
     exit(EXIT_FAILURE);
   }
   int r=atoi(e);/*\0 doit avoit été mis correctement coté serv'.*/
@@ -159,12 +175,16 @@ void DisAuServeurQueJeSuisPresent(int port){
 
   DIR* d;
   struct dirent* dir;
-  d=opendir(".");
+  d=opendir("./Seed");
   if(d){
     while ((dir = readdir(d)) != NULL){
+      if(dir->d_name[0]='.'){
+	continue;/*Pour ne pas afficher les fichier cachés*/
+      }
       int end=LookForEnd(dir->d_name,256);
       char* r=ConvertBracketToStar(dir->d_name,end,256);
       ssize_t res=send(serv,r,end,0);//Envois du nom du fichier au serveur.
+      
       if(-1==res){
 	fprintf(stderr,"DisAuServeurQueJeSuisPresent() problème envoie d'un nom de fichier : %s.\n",strerror(errno));
 	closedir(d);
@@ -230,8 +250,23 @@ int CharPToInt(char* c,int size){
   return atoi(res);
 }
 
+char* resize(char* s,int size){
+  int end=LookForEnd(s,size);
+  if(end>size){
+    fprintf(stderr,"Didn't find a \\0 before i was out of char to check");
+    exit(EXIT_FAILURE);
+  }
+  char* res=malloc(sizeof(char)*end+1);
+  int i=0;
+  while(i<end){
+    res[i]=s[i];
+    ++i;
+  }
+  res[i]='\0';
+  return res;
+}
 
-void RefreshThatList(int port){
+struct listAssoc* RefreshThatList(int port){/*Not the most optimize, but that'll be enough*/
   int serv=ConnectToServ(port);
 
   QueryTypeServ(serv,REFRESH);
@@ -244,12 +279,16 @@ void RefreshThatList(int port){
 
   for(int i=0;i<nbPair;i++){
     ssize_t res=recv(serv,buffer,SIZE_BUFF,0);//Reception du nom du ième pair
-    
     if(-1==res){
       fprintf(stderr,"problème recv pair name, RefreshThatList : %s.\n",strerror(errno));
       free(buffer);
       DisconnectFromServ(serv);
       exit(EXIT_FAILURE);
+    }
+    
+    char* k=resize(buffer,SIZE_BUFF);
+    if(!list){
+      list=make_ListAssoc(k);
     }
     
     int nbFiles=getIntFromServ(serv);
@@ -262,8 +301,50 @@ void RefreshThatList(int port){
 	DisconnectFromServ(serv);
 	exit(EXIT_FAILURE);
       }
+      char* fileName=resize(buffer,SIZE_BUFF);
+      addValue_to_key_list(list,k,fileName);
     }
   }
+  
 
   DisconnectFromServ(serv);
+  return list;
+}
+
+
+
+int createServerSocket(int port){
+  sockListen=socket(PF_INET,SOCK_STREAM,0);//création de la socket
+  
+  struct sockaddr_in addr;//et remplissage
+  memset(&addr,0,sizeof(addr));
+  addr.sin_family=AF_INET;
+  addr.sin_addr.s_addr=INADDR_ANY;
+  addr.sin_port=htons(port);
+  
+  int checkBind=bind(sockListen,(struct sockaddr*)&addr,sizeof(struct sockaddr));//binding de la socket.
+  if(-1==checkBind){
+    if(errno==EADDRINUSE){
+      fprintf(stderr,"L'OS ne tolère pas que le port du socket soit identique entre deux exécutions proches.\nPour plus d'informations sur pourquoi cette attente : \n\nhttps://stackoverflow.com/questions/775638/using-so-reuseaddr-what-happens-to-previously-open-socket\n\n");
+    }
+    else{
+      fprintf(stderr,"problème bind : %d %s.\n",errno,strerror(errno));
+    }
+    exit(EXIT_FAILURE);
+  }
+  
+  if(-1==listen(sockListen,1)){//pour mettre la socket en passif.
+    fprintf(stderr,"problème listen : %s.\n",strerror(errno));
+    exit(EXIT_FAILURE);
+  }
+  
+  return Socklisten;
+}
+
+void* IAMSERVEURNOW(void* param){
+ 
+}
+
+void IAMNOLONGERSERVER(){
+  
 }

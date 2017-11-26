@@ -33,7 +33,7 @@ void sigINT_handler(int signo){
     else{
       printf("\nClosing, have a nice day :)\n");
     }
-    if(close(sockListen)==-1)fprintf(stderr,"problème chdir : %s.\n",strerror(errno));
+    if(close(sockListen)==-1)fprintf(stderr,"problème close sockListen : %s.\n",strerror(errno));
     if(buffer!=NULL)
       free(buffer);
     exit(EXIT_SUCCESS);

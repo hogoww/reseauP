@@ -33,9 +33,6 @@ struct list* add_value_list(struct list *l,char* v){/*to be able to chain those 
   return l;
 }
 
-int size_list(struct list*l){
-  return size_list_aux(l,0);
-}
 
 int size_list_aux(struct list*l,int acc){
   if(l==NULL){
@@ -46,6 +43,44 @@ int size_list_aux(struct list*l,int acc){
   }
 }
 
+int size_list(struct list*l){
+  return size_list_aux(l,0);
+}
+
+
+void DisplayList_aux(struct list* l,int currentNum){
+  if(!l){
+    return;
+  }
+  else{
+    printf("   %d - %s\n",currentNum,l->v);
+    DisplayList_aux(l->next,currentNum+1);
+  }
+}
+
+void DisplayList(struct list* l){
+  DisplayList_aux(l->next,0);
+}
+
+
+struct list* getIndex_list_Aux(struct list* l,int index,int depth){
+  if(l==NULL || depth>index){
+    fprintf(stderr,"getIndex on list out of range");
+    exit(EXIT_FAILURE);
+  }
+  else{
+    if(index==depth){
+      return l;
+    }
+    else{
+      return getIndex_list_Aux(l,index,depth+1);
+    }
+  }
+}
+
+struct list* getIndex_list(struct list* l,int index){
+  return getIndex_list_Aux(l,index,0);
+}
 
 /* ASSOCIATIVE LIST PART*/
 
@@ -109,10 +144,6 @@ struct listAssoc* addValue_to_key_list(struct listAssoc* list,char* key,char* va
 }
 
 
-int size_listAssoc(struct listAssoc*l){
-  return size_listAssoc_aux(l,0);
-}
-
 int size_listAssoc_aux(struct listAssoc*l,int acc){
   if(l==NULL){
     return acc;
@@ -120,4 +151,45 @@ int size_listAssoc_aux(struct listAssoc*l,int acc){
   else{
     return size_listAssoc_aux(l->next,acc+1);
   }
+}
+
+
+int size_listAssoc(struct listAssoc*l){
+  return size_listAssoc_aux(l,0);
+}
+
+void DisplayListAssoc_Aux(struct listAssoc* list,int currentNum){
+  if(!list){
+    return;
+  }
+  else{
+    printf("%d - %s",currentNum,list->k);
+    DisplayList(list->l);
+    DisplayListAssoc_Aux(list->next,currentNum+1);
+  }
+}
+
+void DisplayListAssoc(struct listAssoc* l){
+  DisplayListAssoc_Aux(l->next,0);
+}
+
+
+
+struct listAssoc* getIndex_listAssoc_Aux(struct listAssoc* l,int index,int depth){
+  if(l==NULL || depth>index){
+    fprintf(stderr,"getIndex on listAssoc out of range");
+    exit(EXIT_FAILURE);
+  }
+  else{
+    if(index==depth){
+      return l;
+    }
+    else{
+      return getIndex_listAssoc_Aux(l,index,depth+1);
+    }
+  }
+}
+
+struct listAssoc* getIndex_listAssoc(struct listAssoc* l,int index){
+  return getIndex_listAssoc_Aux(l,index,0);
 }
