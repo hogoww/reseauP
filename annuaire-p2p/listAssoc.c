@@ -33,6 +33,19 @@ struct list* add_value_list(struct list *l,char* v){/*to be able to chain those 
   return l;
 }
 
+int size_list(struct list*l){
+  return size_list_aux(l,0);
+}
+
+int size_list_aux(struct list*l,int acc){
+  if(l==NULL){
+    return acc;
+  }
+  else{
+    return size_list_aux(l->next,acc+1);
+  }
+}
+
 
 /* ASSOCIATIVE LIST PART*/
 
@@ -93,4 +106,18 @@ struct listAssoc* addValue_to_key_list(struct listAssoc* list,char* key,char* va
     add_value_list(l->l,value);
   }
   return list;
+}
+
+
+int size_listAssoc(struct listAssoc*l){
+  return size_listAssoc_aux(l,0);
+}
+
+int size_listAssoc_aux(struct listAssoc*l,int acc){
+  if(l==NULL){
+    return acc;
+  }
+  else{
+    return size_listAssoc_aux(l->next,acc+1);
+  }
 }

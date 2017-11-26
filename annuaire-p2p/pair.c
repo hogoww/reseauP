@@ -44,8 +44,8 @@ int ConnectToServ(int port);
 void DisconnectFromServ(int sock);
 
 /*interaction Annuaire - pair*/
-void DisAuServeurQueJeSuisPresent(int port,char* pseudo,int size_P);
-void DisAuServeurQueJeQuitte(int port,char* pseudo,int size_P);
+void DisAuServeurQueJeSuisPresent(int port);
+void DisAuServeurQueJeQuitte(int port);
 void RefreshThatList(int port);/*Todo*/
 
 void QueryTypeServ(int serv,char type);
@@ -55,19 +55,17 @@ void QueryTypeServ(int serv,char type);
 int LookForEnd(char s[],int size);
 char* ConvertBracketToStar(char s[],int fin,int size);
 int CharPToInt(char* c,int size);
-
+int getIntFromServ(int serv);
 
 
 int main(int argc,char** argv){
-  if(argc!=3){/*Check arguments*/
-    fprintf(stderr,"\n\nusage : ./p [Mon_Pseudo] [Port_Annuaire] \n\n");
+  if(argc!=2){/*Check arguments*/
+    fprintf(stderr,"\n\nusage : ./p [Port_Annuaire] \n\n");
     exit(EXIT_SUCCESS);
   }
-  int port=htons(atoi(argv[2]));
-  char* pseudo=argv[1];
-  int size_P=LookForEnd(argv[1],1000);/*Viens de bash, donc seras bien formaté*/
+  int port=htons(atoi(argv[1]));
 
-  DisAuServeurQueJeSuisPresent(port,pseudo,size_P);
+  DisAuServeurQueJeSuisPresent(port);
   
   int done=0;
   do{
@@ -86,7 +84,7 @@ int main(int argc,char** argv){
 
   }while(!done);
   
-  DisAuServeurQueJeQuitte(port,pseudo,size_P);
+  DisAuServeurQueJeQuitte(port);
 
   return 0;
 }
@@ -140,13 +138,25 @@ char* ConvertBracketToStar(char s[],int end,int size){
   return res;
 }
 
+int getIntFromServ(int serv){
 
-void DisAuServeurQueJeSuisPresent(int port,char* pseudo,int size_P){
+  char* e=malloc(sizeof(char)*32);/*max int = pow(2,32)*/
+  ssize_t res=recv(serv,e,32,0);/*envoie le type de query sur le serv'*/
+  if(-1==res){
+    fprintf(stderr,"problème getIntFromServ : %s.\n",strerror(errno));
+    DisconnectFromServ(serv);
+    exit(EXIT_FAILURE);
+  }
+  int r=atoi(e);/*\0 doit avoit été mis correctement coté serv'.*/
+  free(e);
+  return r;
+}
+
+void DisAuServeurQueJeSuisPresent(int port){
   int serv=ConnectToServ(port);
 
+  QueryTypeServ(serv,COMING);
 
-  SendPseudo(serv,pseudo,size_P);
-  
   DIR* d;
   struct dirent* dir;
   d=opendir(".");
@@ -154,7 +164,7 @@ void DisAuServeurQueJeSuisPresent(int port,char* pseudo,int size_P){
     while ((dir = readdir(d)) != NULL){
       int end=LookForEnd(dir->d_name,256);
       char* r=ConvertBracketToStar(dir->d_name,end,256);
-      res=send(serv,r,end,0);//Envois du nom du fichier au serveur.
+      ssize_t res=send(serv,r,end,0);//Envois du nom du fichier au serveur.
       if(-1==res){
 	fprintf(stderr,"DisAuServeurQueJeSuisPresent() problème envoie d'un nom de fichier : %s.\n",strerror(errno));
 	closedir(d);
@@ -164,7 +174,10 @@ void DisAuServeurQueJeSuisPresent(int port,char* pseudo,int size_P){
       free(r);
     }
 
-    res=send(serv,pseudo,0,0);//fin des fichiers à réceptionner.
+    /*********************/
+    /*CHECK IF THAT WORKS*/
+    /*********************/
+    ssize_t res=send(serv,NULL,0,0);//fin des fichiers à réceptionner.
     if(-1==res){
       fprintf(stderr,"problème DisAuServeurQueJeSuisPresent() envoie signal fin de fichier : %s.\n",strerror(errno));
       closedir(d);
@@ -186,31 +199,21 @@ void DisAuServeurQueJeSuisPresent(int port,char* pseudo,int size_P){
 
 void QueryTypeServ(int serv,char type){
   char* e=malloc(sizeof(char));
-  *e=type;
-  ssize_t res=send(serv,pseudo,size_P,0);//Envois du nom du fichier au serveur.
+  *e=(char)type;/*cast suffisant vu que le serveur le considèreras de la meme façon.*/
+  ssize_t res=send(serv,e,1,0);/*envoie le type de query sur le serv'*/
   if(-1==res){
-    fprintf(stderr,"problème DisAuServeurQueJeQuitte() send pseudo : %s.\n",strerror(errno));
+    fprintf(stderr,"problème DisAuServeurQueJeQuitte() queryTypeServ : %s.\n",strerror(errno));
     DisconnectFromServ(serv);    
     exit(EXIT_FAILURE);
   }
   free(e);
 }
 
-void SendPseudo(int serv,char* pseudo,int size_P){
 
-  ssize_t res=send(serv,pseudo,size_P,0);//Envois du nom du fichier au serveur.
-  if(-1==res){
-    fprintf(stderr,"problème DisAuServeurQueJeQuitte() send pseudo : %s.\n",strerror(errno));
-    DisconnectFromServ(serv);    
-    exit(EXIT_FAILURE);
-  }
-}
-
-void DisAuServeurQueJeQuitte(int port,char* pseudo,int size_P){
+void DisAuServeurQueJeQuitte(int port){
   int serv=ConnectToServ(port);  
   
   QueryTypeServ(serv,LEAVING);
-  SendPseudo(serv,pseudo,size_P);
   
   DisconnectFromServ(serv);
 }
@@ -230,65 +233,37 @@ int CharPToInt(char* c,int size){
 
 void RefreshThatList(int port){
   int serv=ConnectToServ(port);
+
   QueryTypeServ(serv,REFRESH);
 
+  int nbPair=getIntFromServ(serv);
+  
   char* buffer=malloc(sizeof(char)*SIZE_BUFF);
 
-  ssize_t res=recv(serv,buffer,SIZE_BUFF,0);//Reception du nom
-  if(-1==res){
-    fprintf(stderr,"problème recv fileName : %s.\n",strerror(errno));
-    free(buffer);
-    DisconnectFromServ(serv);
-    exit(EXIT_FAILURE);
-  }
+  struct listAssoc* list=NULL;
 
-  CharPToInt(buffer,SIZE_BUFF);
-  
-  res=recv(serv,buffer,SIZE_BUFF,0);//Reception du nom
-  if(-1==res){
-    fprintf(stderr,"problème recv fileName : %s.\n",strerror(errno));
-    free(buffer);
-    DisconnectFromServ(serv);
-    exit(EXIT_FAILURE);
-  }
-  
-  
-  res=recv(serv,buffer,SIZE_BUFF,0);//Reception du nom
-  if(-1==res){
-    fprintf(stderr,"problème recv fileName : %s.\n",strerror(errno));
-    free(buffer);
-    DisconnectFromServ(serv);
-    exit(EXIT_FAILURE);
+  for(int i=0;i<nbPair;i++){
+    ssize_t res=recv(serv,buffer,SIZE_BUFF,0);//Reception du nom du ième pair
+    
+    if(-1==res){
+      fprintf(stderr,"problème recv pair name, RefreshThatList : %s.\n",strerror(errno));
+      free(buffer);
+      DisconnectFromServ(serv);
+      exit(EXIT_FAILURE);
+    }
+    
+    int nbFiles=getIntFromServ(serv);
+   
+    for(int j=0;j<nbFiles;j++){
+      res=recv(serv,buffer,SIZE_BUFF,0);//Reception du jeme filename du ieme pair
+      if(-1==res){
+	fprintf(stderr,"problème recv fileName RefreshThatList : %s.\n",strerror(errno));
+	free(buffer);
+	DisconnectFromServ(serv);
+	exit(EXIT_FAILURE);
+      }
+    }
   }
 
   DisconnectFromServ(serv);
 }
-
-
-
-/* /\******************************************\/ */
-/* /\*MODIFY PARAMETER TO INCLUDE SERV ADDRESS*\/ */
-/* /\******************************************\/ */
-/* int ConnectToServ(int port){ */
-/*   int sockListener=socket(PF_INET,SOCK_STREAM,0);//création de la socket */
-/*   if(sockListener==-1){fprintf(stderr,"Probleme ConnectToserv socket() : %s.\n",strerror(errno));exit(EXIT_FAILURE);} */
-  
-/*   struct sockaddr_in addr;//et remplissage des infos passé en ligne de commande. */
-/*   memset(&addr,0,sizeof(addr)); */
-/*   addr.sin_family=AF_INET; */
-/*   int checkReturn=inet_pton(AF_INET,SERV_ADDRESS,&(addr.sin_addr)); */
-/*   if (checkReturn == 0){ */
-/*     fprintf(stderr, "Adresse fournie format incorrect"); */
-/*     close(sock); */
-/*     exit(EXIT_FAILURE); */
-/*   } */
-/*   addr.sin_port=htons(port); */
-
-/*   int check=bind(sockListen,(struct sockaddr*)&addr,sizeof(struct sockaddr));//binding de la socket.   */
-/*   if(check==-1){fprintf(stderr,"Probleme ConnectToserv bind() : %s.\n",strerror(errno));exit(EXIT_FAILURE);} */
-
-/*   if(-1==listen(sockListen,1))//pour mettre la socket en passif. */
-/*     {fprintf(stderr,"problème ConnectToserv listen() : %s.\n",strerror(errno));exit(EXIT_FAILURE);} */
-  
-/*   return sockListen; */
-/* } */
