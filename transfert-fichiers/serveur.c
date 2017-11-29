@@ -92,7 +92,14 @@ int main(int argc,char** argv){
       exit(EXIT_FAILURE);
     }
     
-    printf("sending a file\n");
+    /* struct sockaddr_in client; */
+    /* socklen_t s=sizeof(struct sockaddr_in); */
+    /* getpeername(descClient,(struct sockaddr*)&client,&s); */
+    /* char* cl=malloc(100*sizeof(char)); */
+    /* inet_ntop(AF_INET, &client, cl, sizeof(char)*100); */
+  
+    /* printf("sending a file to %s \n",cl); */
+    printf("sending a file \n");
 
     buffer=malloc(sizeof(char)*SIZE_BUFF);//Préparation du buffer d'envois
     memset(buffer,0,SIZE_BUFF);

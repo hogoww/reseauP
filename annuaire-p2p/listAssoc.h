@@ -34,6 +34,8 @@ struct listAssoc* addValue_to_key_list(struct listAssoc* list,char* key,char* va
 int size_listAssoc(struct listAssoc*l);
 void DisplayListAssoc(struct listAssoc* list);
 struct listAssoc* getIndex_listAssoc(struct listAssoc* l,int index);
-
+struct listAssoc* destroyAndChangeList_listAssoc(struct listAssoc* l,char* key,struct list * li);
+void delNode_listAssoc(struct listAssoc l);
+void removeThatKey_listAssoc(struct listAssoc* l,char *key);
 
 #endif

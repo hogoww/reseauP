@@ -193,3 +193,47 @@ struct listAssoc* getIndex_listAssoc_Aux(struct listAssoc* l,int index,int depth
 struct listAssoc* getIndex_listAssoc(struct listAssoc* l,int index){
   return getIndex_listAssoc_Aux(l,index,0);
 }
+
+
+struct listAssoc* destroyAndChangeList_listAssoc(struct listAssoc* l,char* key,struct list * li){
+  struct listAssoc* t=get_key_listAssoc(l,key);
+  if(t->l){
+    delete_list_and_values(t->l);
+  }
+  t->l=li;
+  return l;
+}
+
+void removeThatKey_listAssoc(struct listAssoc* l,char *key){
+  if(l==NULL){
+    return null;
+  }
+
+  struct listAssoc *base=l;
+
+  while(l->next){
+    if(strcmp(key,l->next->k)){
+      break;
+    }
+    else{
+      l=l->next;
+    }
+  }
+
+  if(l->next==NULL){
+    fprintf(stderr,"La liste ne contiens pas la clée %s\n",key);
+    return base;
+  }
+  else{
+    struct list* t=l->next;    
+    l->next=t->next;
+    delNode_listAssoc(t);
+    return base;
+  }
+  
+}
+
+void delNode_listAssoc(struct listAssoc l){
+  free(l->key);
+  delete_list_and_values(l->l);
+}

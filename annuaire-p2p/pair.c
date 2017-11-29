@@ -23,14 +23,10 @@
 
 /*API personnelles*/
 #include "listAssoc.h"
+#include "shared_define.h"
 
-#define QUERY_BUFF_SIZE
-#define SIZE_BUFF 4096
+
 #define SERV_ADDRESS "127.0.0.1"
-
-#define LEAVING '1'
-#define COMING '2'
-#define REFRESH '3'
 
 
 struct servParam{
@@ -44,17 +40,17 @@ struct servParam{
 /******************************************/
 
 /*Connection*/
-int ConnectToServ(int port);
+int ConnectToServ(uint16_t port);
 void DisconnectFromServ(int sock);
 
 /*interaction Annuaire - pair*/
-void DisAuServeurQueJeSuisPresent(int port);
-void DisAuServeurQueJeQuitte(int port);
+void DisAuServeurQueJeSuisPresent(uint16_t port);
+void DisAuServeurQueJeQuitte(uint16_t port);
 void QueryTypeServ(int serv,char type);
-struct listAssoc* RefreshThatList(int port);
+struct listAssoc* RefreshThatList(uint16_t port);
 
 /*Server side*/
-int createServerSocket(int port);
+int createServerSocket(uint16_t port);
 void* IAMSERVEURNOW(void* param);
 void IAMNOLONGERSERVER();
 
@@ -68,9 +64,9 @@ int getIntFromServ(int serv);
 int main(int argc,char** argv){
   if(argc!=2){/*Check arguments*/
     fprintf(stderr,"\n\nusage : ./p [Port_Annuaire] \n\n");
-    exit(EXIT_SUCCESS);
+    exit(EXIT_FAILURE);
   }
-  int port=htons(atoi(argv[1]));
+  uint16_t port=htons(atoi(argv[1]));
 
   DisAuServeurQueJeSuisPresent(port);
   
@@ -107,7 +103,8 @@ int main(int argc,char** argv){
 
   }while(!done);
 
-  free(list);
+  delete_listAssoc_and_key_and_values(list);
+  //free(list);
   IAMNOLONGERSERVER(sp->sock);
   printf("signal d'arret envoyé au serveur\n");
   DisAuServeurQueJeQuitte(port);
@@ -120,7 +117,7 @@ int main(int argc,char** argv){
   return 0;
 }
 
-int ConnectToServ(int port){
+int ConnectToServ(uint16_t port){
   int sock=socket(PF_INET,SOCK_STREAM,0);//création de la socket
   if(sock==-1){fprintf(stderr,"Probleme ConnectToserv socket() : %s.\n",strerror(errno));exit(EXIT_FAILURE);}
   
@@ -183,7 +180,7 @@ int getIntFromServ(int serv){
   return r;
 }
 
-void DisAuServeurQueJeSuisPresent(int port){
+void DisAuServeurQueJeSuisPresent(uint16_t port){
   int serv=ConnectToServ(port);
 
   QueryTypeServ(serv,COMING);
@@ -245,7 +242,7 @@ void QueryTypeServ(int serv,char type){
 }
 
 
-void DisAuServeurQueJeQuitte(int port){
+void DisAuServeurQueJeQuitte(uint16_t port){
   int serv=ConnectToServ(port);  
   
   QueryTypeServ(serv,LEAVING);
@@ -281,7 +278,7 @@ char* resize(char* s,int size){
   return res;
 }
 
-struct listAssoc* RefreshThatList(int port){/*Not the most optimize, but that'll be enough*/
+struct listAssoc* RefreshThatList(uint16_t port){/*Not the most optimize, but that'll be enough*/
   int serv=ConnectToServ(port);
 
   QueryTypeServ(serv,REFRESH);
@@ -328,14 +325,14 @@ struct listAssoc* RefreshThatList(int port){/*Not the most optimize, but that'll
 
 
 
-int createServerSocket(int port){
+int createServerSocket(uint16_t port){
   int sockListen=socket(PF_INET,SOCK_STREAM,0);//création de la socket
   
   struct sockaddr_in addr;//et remplissage
   memset(&addr,0,sizeof(addr));
   addr.sin_family=AF_INET;
   addr.sin_addr.s_addr=INADDR_ANY;
-  addr.sin_port=htons(port);
+  addr.sin_port=port;
   
   int checkBind=bind(sockListen,(struct sockaddr*)&addr,sizeof(struct sockaddr));//binding de la socket.
   if(-1==checkBind){
