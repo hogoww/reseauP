@@ -29,6 +29,7 @@ int getQueryFromPeer(int descClient);
 void sigINT_handler(int signo);
 void treatQuery(int descClient,int q,struct listAssoc list);
 void AddThatClient(int descClient,struct listAssoc list);
+void SendListToThatClient(int descClient,struct listAssoc list);
 void RemoveThatClient(int descClient,struct listAssoc list);
 char* getClientIPString(int descClient);
 
@@ -125,6 +126,7 @@ void treatQuery(int descClient,int q,struct listAssoc list){
     break;
   case COMING:
     AddThatClient(descClient,list);
+    SendListToThatClient(descClient,list);
     break;
   case REFRESH:
     break;
@@ -176,4 +178,12 @@ char* getClientIPString(int descClient){
   char* ip=malloc(100*sizeof(char));/*seras free en meme temps que la liste*/
   inet_ntop(AF_INET, &client, ip, sizeof(char)*100);
   return ip;
+}
+
+void SendListToThatClient(int descClient,struct listAssoc list){
+  char* ip=getclientipstring(descClient);
+
+  
+  
+  free(ip);
 }

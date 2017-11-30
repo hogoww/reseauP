@@ -282,16 +282,16 @@ struct listAssoc* RefreshThatList(uint16_t port){/*Not the most optimize, but th
   int serv=ConnectToServ(port);
 
   QueryTypeServ(serv,REFRESH);
-
-  int nbPair=getIntFromServ(serv);
   
   char* buffer=malloc(sizeof(char)*SIZE_BUFF);
 
   struct listAssoc* list=NULL;
-
-  for(int i=0;i<nbPair;i++){
-    ssize_t res=recv(serv,buffer,SIZE_BUFF,0);//Reception du nom du ième pair
-    if(-1==res){
+  ssize_t res1,res2;
+  
+  do{
+    
+    ssize_t res1=recv(serv,buffer,SIZE_BUFF,0);//Reception du nom du ième pair
+    if(-1==res1){
       fprintf(stderr,"problème recv pair name, RefreshThatList : %s.\n",strerror(errno));
       free(buffer);
       DisconnectFromServ(serv);
@@ -304,19 +304,29 @@ struct listAssoc* RefreshThatList(uint16_t port){/*Not the most optimize, but th
     }
     
     int nbFiles=getIntFromServ(serv);
+
+    struct list lt=NULL;
    
-    for(int j=0;j<nbFiles;j++){
-      res=recv(serv,buffer,SIZE_BUFF,0);//Reception du jeme filename du ieme pair
-      if(-1==res){
+    do{
+      res2=recv(serv,buffer,SIZE_BUFF,0);//Reception du jeme filename du ieme pair
+      if(-1==res2){
 	fprintf(stderr,"problème recv fileName RefreshThatList : %s.\n",strerror(errno));
 	free(buffer);
 	DisconnectFromServ(serv);
 	exit(EXIT_FAILURE);
       }
+      
+      if(res2==0 || buffer[0]=='\0'){
+	break;
+      }
+      
       char* fileName=resize(buffer,SIZE_BUFF);
-      addValue_to_key_list(list,k,fileName);
-    }
-  }
+      add_value_list(lt,filename);
+    }while(1);
+
+    destroyAndChangeList_listAssoc(l,ip,lt);
+
+  }while(1);
   
 
   DisconnectFromServ(serv);
