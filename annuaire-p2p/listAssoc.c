@@ -15,13 +15,19 @@ void delete_list(struct list* l){/*free only "next"s pointers*/
 }
 
 void delete_list_and_values(struct list* l){
- if(l->next!=NULL)
+  if(l==NULL)
+    return;
+  if(l->next==NULL)
     delete_list_and_values(l->next);
- free(l->v);
- free(l);
+  free(l->v);
+  free(l);
 }
 
 struct list* add_value_list(struct list *l,char* v){/*to be able to chain those operations*/
+  if(l==NULL){
+    return make_list(v);
+  }
+
   struct list* base=l;
   while(l->next!=NULL){
     l=l->next;
@@ -54,13 +60,13 @@ void DisplayList_aux(struct list* l,int currentNum){
     return;
   }
   else{
-    printf("   %d - %s\n",currentNum,l->v);
+    printf("\t%d - %s\n",currentNum,l->v);
     DisplayList_aux(l->next,currentNum+1);
   }
 }
 
 void DisplayList(struct list* l){
-  DisplayList_aux(l->next,0);
+  DisplayList_aux(l,0);
 }
 
 
@@ -160,24 +166,30 @@ int size_listAssoc(struct listAssoc*l){
 }
 
 void DisplayListAssoc_Aux(struct listAssoc* list,int currentNum){
-  if(!list){
+  printf("Displaying listAssoc\n");
+  if(list==NULL){
+    printf("empty\n");
     return;
   }
   else{
-    printf("%d - %s",currentNum,list->k);
+    if(list->k==NULL){
+      printf("isn't supposed to happend\n");
+    }
+    else{
+      printf("%d - %s\n",currentNum,list->k);
+    }
     DisplayList(list->l);
     DisplayListAssoc_Aux(list->next,currentNum+1);
   }
 }
 
 void DisplayListAssoc(struct listAssoc* l){
-  DisplayListAssoc_Aux(l->next,0);
+  DisplayListAssoc_Aux(l,0);
 }
 
 
-
 struct listAssoc* getIndex_listAssoc_Aux(struct listAssoc* l,int index,int depth){
-  if(l==NULL || depth>index){
+  if(l==NULL || depth>index){/*DEVRAS RENVOYER NULL POUR CONTINUER LE TRAITEMENT*/
     fprintf(stderr,"getIndex on listAssoc out of range");
     exit(EXIT_FAILURE);
   }
@@ -197,7 +209,15 @@ struct listAssoc* getIndex_listAssoc(struct listAssoc* l,int index){
 
 
 struct listAssoc* destroyAndChangeList_listAssoc(struct listAssoc* l,char* key,struct list * li){
-  struct listAssoc* t=get_key_listAssoc(l,key);
+  struct listAssoc* t;
+  if(l==NULL){
+    t=make_ListAssoc(key);
+  }
+  else{
+    t=get_key_listAssoc(l,key);
+  }
+  printf("%s\n",key);
+  DisplayList(li);
   if(t->l){
     delete_list_and_values(t->l);
   }

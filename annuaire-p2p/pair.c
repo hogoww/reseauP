@@ -46,7 +46,7 @@ void DisconnectFromServ(int sock);
 void DisAuServeurQueJeSuisPresent(uint16_t port);
 void DisAuServeurQueJeQuitte(uint16_t port);
 void QueryTypeServ(int serv,char type);
-struct listAssoc* RefreshThatList(uint16_t port);
+struct listAssoc* RefreshThatList(uint16_t port,int NeedToQueryType);
 
 /*Server side*/
 int createServerSocket(uint16_t port);
@@ -81,7 +81,7 @@ int main(int argc,char** argv){
   
 
   struct listAssoc* list=NULL;
-  list=RefreshThatList(port);
+  list=RefreshThatList(port,1);
   DisplayListAssoc(list);
   int done=0;
   do{
@@ -90,7 +90,7 @@ int main(int argc,char** argv){
     switch(fgetc(stdin)){
     case 'R':
       free(list);
-      list=RefreshThatList(port);
+      list=RefreshThatList(port,0);
       DisplayListAssoc(list);
       break;
     case 'Q':
@@ -111,7 +111,7 @@ int main(int argc,char** argv){
   printf("J'ai dis au serveur annuaire que je partais\n");
 
   printf("Et j'attends que le serveur soit terminé (il attends que les envois soit finis)\n");
-  pthread_join(server,NULL);
+  //pthread_join(server,NULL);
   printf("serveur eteint, bonne journée:)\n");
 
   return 0;
@@ -157,7 +157,7 @@ char* ConvertBracketToStar(char s[],int end,int size){
     fprintf(stderr,"Convert char[] to char* failed\n");
   }
   int i=0;
-  char* res=malloc(sizeof(char)*end+1);
+  char* res=malloc(sizeof(char)*end);
   if(res==NULL){fprintf(stderr,"Problème Malloc : %s.\n",strerror(errno));exit(EXIT_FAILURE);}
   while(i<end){
     res[i]=s[i];
@@ -185,18 +185,21 @@ void DisAuServeurQueJeSuisPresent(uint16_t port){
   int serv=ConnectToServ(port);
 
   QueryTypeServ(serv,COMING);
-
+  char *buffer=malloc(sizeof(char)*SIZE_BUFF);
   DIR* d;
   struct dirent* dir;
   d=opendir("./Seed");
   if(d){
     while ((dir = readdir(d)) != NULL){
-      if((dir->d_name[0]='.')){
+      if((dir->d_name[0]=='.')){
 	continue;/*Pour ne pas afficher les fichier cachés*/
       }
+
       int end=LookForEnd(dir->d_name,256);
       char* r=ConvertBracketToStar(dir->d_name,end,256);
-      ssize_t res=send(serv,r,end,0);//Envois du nom du fichier au serveur.
+      strcpy(buffer,r);
+      printf("sending %s\n",buffer);
+      ssize_t res=send(serv,buffer,SIZE_BUFF,0);//Envois du nom du fichier au serveur.
       
       if(-1==res){
 	fprintf(stderr,"DisAuServeurQueJeSuisPresent() problème envoie d'un nom de fichier : %s.\n",strerror(errno));
@@ -210,7 +213,8 @@ void DisAuServeurQueJeSuisPresent(uint16_t port){
     /*********************/
     /*CHECK IF THAT WORKS*/
     /*********************/
-    ssize_t res=send(serv,NULL,0,0);//fin des fichiers à réceptionner.
+    buffer[0]='\0';
+    ssize_t res=send(serv,buffer,0,0);//fin des fichiers à réceptionner.
     if(-1==res){
       fprintf(stderr,"problème DisAuServeurQueJeSuisPresent() envoie signal fin de fichier : %s.\n",strerror(errno));
       closedir(d);
@@ -226,6 +230,7 @@ void DisAuServeurQueJeSuisPresent(uint16_t port){
     exit(EXIT_FAILURE);
   }
 
+  free(buffer);
   DisconnectFromServ(serv);
 }
   
@@ -279,10 +284,13 @@ char* resize(char* s,int size){
   return res;
 }
 
-struct listAssoc* RefreshThatList(uint16_t port){/*Not the most optimize, but that'll be enough*/
+struct listAssoc* RefreshThatList(uint16_t port,int NeedToQueryType){/*Not the most optimize, but that'll be enough*/
+    
   int serv=ConnectToServ(port);
-
-  QueryTypeServ(serv,REFRESH);
+  
+  if(NeedToQueryType){
+    QueryTypeServ(serv,REFRESH);
+  }
   
   char* buffer=malloc(sizeof(char)*SIZE_BUFF);
 

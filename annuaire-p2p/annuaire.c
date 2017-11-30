@@ -27,10 +27,10 @@
 
 int getQueryFromPeer(int descClient);
 void sigINT_handler(int signo);
-void treatQuery(int descClient,int q,struct listAssoc* list);
-void AddThatClient(int descClient,struct listAssoc* list);
+struct listAssoc* treatQuery(int descClient,int q,struct listAssoc* list);
+struct listAssoc* AddThatClient(int descClient,struct listAssoc* list);
 void SendListToThatClient(int descClient,struct listAssoc* list);
-void RemoveThatClient(int descClient,struct listAssoc* list);
+struct listAssoc* RemoveThatClient(int descClient,struct listAssoc* list);
 char* getClientIPString(int descClient);
 
 
@@ -62,7 +62,12 @@ int main(int argc,char** argv){
   
   int checkBind=bind(sockListen,(struct sockaddr*)&addr,sizeof(struct sockaddr));//binding de la socket.
   if(-1==checkBind){
-    fprintf(stderr,"problème bind : %s.\n",strerror(errno));
+    if(errno==EADDRINUSE){
+      fprintf(stderr,"L'OS ne tolère pas que le port du socket soit identique entre deux exécutions proches.\nPour plus d'informations sur pourquoi cette attente : \n\nhttps://stackoverflow.com/questions/775638/using-so-reuseaddr-what-happens-to-previously-open-socket\n\n");
+    }
+    else{
+      fprintf(stderr,"problème bind : %d %s.\n",errno,strerror(errno));
+    }
     exit(EXIT_FAILURE);
   }
   
@@ -85,7 +90,7 @@ int main(int argc,char** argv){
     }
     
     int q=getQueryFromPeer(descClient);
-    treatQuery(descClient,q,list);
+    list=treatQuery(descClient,q,list);
     
     close(descClient);
   }
@@ -102,9 +107,9 @@ void sigINT_handler(int signo){
       printf("\nClosing, have a nice day :)\n");
     }
     close(sockListen);
-    if(buffer!=NULL){
-      free(buffer);
-    }
+    /* if(buffer!=NULL){ */
+    /*   free(buffer); */
+    /* } */
     exit(EXIT_SUCCESS);
   }
 }
@@ -125,13 +130,14 @@ int getQueryFromPeer(int descClient){
   return a;
 }
 
-void treatQuery(int descClient,int q,struct listAssoc* list){
+struct listAssoc* treatQuery(int descClient,int q,struct listAssoc* list){
   switch(q){
   case LEAVING:
-    RemoveThatClient(descClient,list);
+    list=RemoveThatClient(descClient,list);
     break;
   case COMING:
-    AddThatClient(descClient,list);
+    list=AddThatClient(descClient,list);
+    DisplayListAssoc(list);
     SendListToThatClient(descClient,list);
     break;
   case REFRESH:
@@ -139,11 +145,11 @@ void treatQuery(int descClient,int q,struct listAssoc* list){
     break;
   default:
     fprintf(stderr,"Requete client n'as pas été reconnue, je ferme sa connection\n");
-    break;
   }
+  return list;
 }
 
-void AddThatClient(int descClient,struct listAssoc* list){
+struct listAssoc* AddThatClient(int descClient,struct listAssoc* list){
   buffer=malloc(sizeof(char)*SIZE_BUFF);
 
   char* ip=getClientIPString(descClient);
@@ -160,22 +166,25 @@ void AddThatClient(int descClient,struct listAssoc* list){
       exit(EXIT_FAILURE);
     }
     
-    char* t=strncpy(buffer,malloc(sizeof(char)*res),res);
-    if(list==NULL){
-      l=make_list(t);
+    if(res==0 || buffer[0]=='\0'){
+      break; 
     }
-    else{
-      add_value_list(l,t);
-    }
+    
+    char* t=strcpy(malloc(sizeof(char)*res),buffer);/*libéré en meme temps que la liste*/
+    printf("%s\n",buffer);
+    l=add_value_list(l,t);
   }
-  while(res!=0);
-  
-  destroyAndChangeList_listAssoc(list,ip,l);
+  while(1);
+
+  list=destroyAndChangeList_listAssoc(list,ip,l);
+  DisplayListAssoc(list);
+
   free(buffer);
+  return list;
 }
 
-void RemoveThatClient(int descClient,struct listAssoc* list){
-  removeThatKey_listAssoc(list,getClientIPString(descClient));
+struct listAssoc* RemoveThatClient(int descClient,struct listAssoc* list){
+  return removeThatKey_listAssoc(list,getClientIPString(descClient));
 }
 
 char* getClientIPString(int descClient){
