@@ -26,14 +26,13 @@
 #include "shared_define.h"
 
 
-#define SERV_ADDRESS "127.0.0.1"
 
+char* SERV_ADDRESS;
 
 struct servParam{
   int sock;
   /*TO DO*/
 };
-/*get peer name*/
 
 /******************************************/
 /*MODIFY PARAMETER TO INCLUDE SERV ADDRESS*/
@@ -62,30 +61,31 @@ int getIntFromServ(int serv);
 
 
 int main(int argc,char** argv){
-  if(argc!=2){/*Check arguments*/
-    fprintf(stderr,"\n\nusage : ./p [Port_Annuaire] \n\n");
+  if(argc!=3){/*Check arguments*/
+    fprintf(stderr,"\nUsage : ./p [adresse_annuaire] [Port_Annuaire] \n\n");
     exit(EXIT_FAILURE);
   }
-  uint16_t port=htons(atoi(argv[1]));
+
+  SERV_ADDRESS=argv[1];
+  uint16_t port=htons(atoi(argv[2]));
 
   DisAuServeurQueJeSuisPresent(port);
   
 
-  
   pthread_t server;/*Lancement serveur*/
   struct servParam *sp=malloc(sizeof(struct servParam));
   sp->sock=createServerSocket(port+1);/*Pour ne pas etre sur le meme port que le serveur annuaire*/
   if(-1==pthread_create(&server,NULL,IAMSERVEURNOW,(void*)sp)){
     fprintf(stderr,"problème creation thread serveur: %s.\n",strerror(errno));
   }
-
+  
 
   struct listAssoc* list=NULL;
   list=RefreshThatList(port);
   DisplayListAssoc(list);
   int done=0;
   do{
-    printf("\nR -> Refresh la liste de l'annuaire\nQ-> Quite le reseau\n");
+    printf("\nR -> Refresh la liste de l'annuaire\nQ-> Quitte le reseau\n");
 
     switch(fgetc(stdin)){
     case 'R':
@@ -122,15 +122,16 @@ int ConnectToServ(uint16_t port){
   if(sock==-1){fprintf(stderr,"Probleme ConnectToserv socket() : %s.\n",strerror(errno));exit(EXIT_FAILURE);}
   
   struct sockaddr_in addr;//et remplissage des infos passé en ligne de commande.
-  memset(&addr,0,sizeof(addr));
+  memset(&addr,0,sizeof(struct sockaddr));
   addr.sin_family=AF_INET;
+
   int checkReturn=inet_pton(AF_INET,SERV_ADDRESS,&(addr.sin_addr));
   if (checkReturn==0 || checkReturn==-1){
     fprintf(stderr, "ConnectToServ : Adresse fournie format incorrect ; %s.\n",strerror(errno));
     DisconnectFromServ(sock);
     exit(EXIT_FAILURE);
   }
-  addr.sin_port=htons(port);
+  addr.sin_port=port;
 
   if(-1==connect(sock,(struct sockaddr*)&addr,sizeof(struct sockaddr))){//Connection au serveur
     fprintf(stderr,"problème ConnectToServ Connect() : %s.\n",strerror(errno));
@@ -290,7 +291,7 @@ struct listAssoc* RefreshThatList(uint16_t port){/*Not the most optimize, but th
   
   do{
     
-    ssize_t res1=recv(serv,buffer,SIZE_BUFF,0);//Reception du nom du ième pair
+    res1=recv(serv,buffer,SIZE_BUFF,0);//Reception du nom du ième pair
     if(-1==res1){
       fprintf(stderr,"problème recv pair name, RefreshThatList : %s.\n",strerror(errno));
       free(buffer);
@@ -298,14 +299,16 @@ struct listAssoc* RefreshThatList(uint16_t port){/*Not the most optimize, but th
       exit(EXIT_FAILURE);
     }
     
-    char* k=resize(buffer,SIZE_BUFF);
+    if(res2==0 || buffer[0]=='\0'){
+      break;
+    }
+
+    char* ip=resize(buffer,SIZE_BUFF);
     if(!list){
-      list=make_ListAssoc(k);
+      list=make_ListAssoc(ip);
     }
     
-    int nbFiles=getIntFromServ(serv);
-
-    struct list lt=NULL;
+    struct list* lt=NULL;
    
     do{
       res2=recv(serv,buffer,SIZE_BUFF,0);//Reception du jeme filename du ieme pair
@@ -321,13 +324,14 @@ struct listAssoc* RefreshThatList(uint16_t port){/*Not the most optimize, but th
       }
       
       char* fileName=resize(buffer,SIZE_BUFF);
-      add_value_list(lt,filename);
+      add_value_list(lt,fileName);
     }while(1);
 
-    destroyAndChangeList_listAssoc(l,ip,lt);
+    destroyAndChangeList_listAssoc(list,ip,lt);
 
   }while(1);
-  
+
+  free(buffer);
 
   DisconnectFromServ(serv);
   return list;

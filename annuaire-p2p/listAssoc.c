@@ -22,6 +22,7 @@ void delete_list_and_values(struct list* l){
 }
 
 struct list* add_value_list(struct list *l,char* v){/*to be able to chain those operations*/
+  struct list* base=l;
   while(l->next!=NULL){
     l=l->next;
   }
@@ -30,7 +31,7 @@ struct list* add_value_list(struct list *l,char* v){/*to be able to chain those 
   l->next->v=v;
   l->next->next=NULL;
   
-  return l;
+  return base;
 }
 
 
@@ -204,15 +205,15 @@ struct listAssoc* destroyAndChangeList_listAssoc(struct listAssoc* l,char* key,s
   return l;
 }
 
-void removeThatKey_listAssoc(struct listAssoc* l,char *key){
+struct listAssoc* removeThatKey_listAssoc(struct listAssoc* l,char *key){
   if(l==NULL){
-    return null;
+    return NULL;
   }
 
   struct listAssoc *base=l;
 
   while(l->next){
-    if(strcmp(key,l->next->k)){
+    if(!strcmp(key,l->next->k)){
       break;
     }
     else{
@@ -225,7 +226,7 @@ void removeThatKey_listAssoc(struct listAssoc* l,char *key){
     return base;
   }
   else{
-    struct list* t=l->next;    
+    struct listAssoc* t=l->next;    
     l->next=t->next;
     delNode_listAssoc(t);
     return base;
@@ -233,7 +234,7 @@ void removeThatKey_listAssoc(struct listAssoc* l,char *key){
   
 }
 
-void delNode_listAssoc(struct listAssoc l){
-  free(l->key);
+void delNode_listAssoc(struct listAssoc *l){
+  free(l->k);
   delete_list_and_values(l->l);
 }

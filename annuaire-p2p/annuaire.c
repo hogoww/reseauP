@@ -19,7 +19,7 @@
 #include <dirent.h>
 
 /*fin du serveur*/
-#include <signal>
+#include <signal.h>
 
 /*API personnelles*/
 #include "listAssoc.h"
@@ -27,15 +27,21 @@
 
 int getQueryFromPeer(int descClient);
 void sigINT_handler(int signo);
-void treatQuery(int descClient,int q,struct listAssoc list);
-void AddThatClient(int descClient,struct listAssoc list);
-void SendListToThatClient(int descClient,struct listAssoc list);
-void RemoveThatClient(int descClient,struct listAssoc list);
+void treatQuery(int descClient,int q,struct listAssoc* list);
+void AddThatClient(int descClient,struct listAssoc* list);
+void SendListToThatClient(int descClient,struct listAssoc* list);
+void RemoveThatClient(int descClient,struct listAssoc* list);
 char* getClientIPString(int descClient);
+
+
+char* buffer=NULL;
+int sockListen;
+int receiving=0;
+
 
 int main(int argc,char** argv){
   if(argc!=2){/*Check arguments*/
-    fprintf(stderr,"\n\nusage : ./p [port] \n\n");
+    fprintf(stderr,"\nusage : ./p [port] \n\n");
     exit(EXIT_FAILURE);
   }
 
@@ -46,13 +52,13 @@ int main(int argc,char** argv){
 
   uint16_t port=htons(atoi(argv[1]));
 
-  sockListen=socket(PF_INET,SOCK_STREAM,0);//création de la socket
+  int sockListen=socket(PF_INET,SOCK_STREAM,0);//création de la socket
 
   struct sockaddr_in addr;//et remplissage
   memset(&addr,0,sizeof(addr));
   addr.sin_family=AF_INET;
   addr.sin_addr.s_addr=INADDR_ANY;
-  addr.sin_port=port;  
+  addr.sin_port=port;
   
   int checkBind=bind(sockListen,(struct sockaddr*)&addr,sizeof(struct sockaddr));//binding de la socket.
   if(-1==checkBind){
@@ -65,15 +71,14 @@ int main(int argc,char** argv){
     exit(EXIT_FAILURE);
   }
   
-  struct listAssoc list=NULL;
+  struct listAssoc* list=NULL;
  
   printf("Serveur dispo. Utilisez le signal ctrl+c pour l'arreter proprement\n");
 
   while(1){//On commence la boucle infinie de reception, qui ne se termineras Proprement que sur un sigINT (ctrl + c)
     printf("En attente d'un nouveau client\n");
     
-    struct sockaddr_in* client_sa;
-    descClient=accept(sockListen,(struct sockaddr*)client_sa,sizeof(struct sockaddr_in),0);//acceptation du nouveau client (ou attente de celui ci, vu que accept est bloquant).
+    int descClient=accept(sockListen,NULL,NULL);//acceptation du nouveau client (ou attente de celui ci, vu que accept est bloquant).
     if(-1==descClient){
       fprintf(stderr,"problème accept : %s.\n",strerror(errno));
       exit(EXIT_FAILURE);
@@ -97,11 +102,12 @@ void sigINT_handler(int signo){
       printf("\nClosing, have a nice day :)\n");
     }
     close(sockListen);
-    if(buffer!=NULL)
+    if(buffer!=NULL){
+      free(buffer);
+    }
     exit(EXIT_SUCCESS);
   }
 }
-
 
 int getQueryFromPeer(int descClient){
   char* buffer=malloc(sizeof(char));
@@ -114,12 +120,12 @@ int getQueryFromPeer(int descClient){
     exit(EXIT_FAILURE);
   }
   
-  int a=(int)buffer;
+  int a=(int)*buffer;
   free(buffer);
   return a;
 }
 
-void treatQuery(int descClient,int q,struct listAssoc list){
+void treatQuery(int descClient,int q,struct listAssoc* list){
   switch(q){
   case LEAVING:
     RemoveThatClient(descClient,list);
@@ -129,6 +135,7 @@ void treatQuery(int descClient,int q,struct listAssoc list){
     SendListToThatClient(descClient,list);
     break;
   case REFRESH:
+    SendListToThatClient(descClient,list);
     break;
   default:
     fprintf(stderr,"Requete client n'as pas été reconnue, je ferme sa connection\n");
@@ -136,13 +143,13 @@ void treatQuery(int descClient,int q,struct listAssoc list){
   }
 }
 
-void AddThatClient(int descClient,struct listAssoc list){
+void AddThatClient(int descClient,struct listAssoc* list){
   buffer=malloc(sizeof(char)*SIZE_BUFF);
 
-  char* ip=getClientIPString(desClient);
+  char* ip=getClientIPString(descClient);
   printf("J'ajoute le client d'ip %s \n",ip);
 
-  struct list l=NULL;
+  struct list* l=NULL;
   ssize_t res=1;
   do{
     res=recv(descClient,buffer,SIZE_BUFF,0);
@@ -163,11 +170,11 @@ void AddThatClient(int descClient,struct listAssoc list){
   }
   while(res!=0);
   
-  destroyAndChangeList_listAssoc(list,ip,li);
+  destroyAndChangeList_listAssoc(list,ip,l);
   free(buffer);
 }
 
-void RemoveThatClient(int descClient,struct listAssoc list){
+void RemoveThatClient(int descClient,struct listAssoc* list){
   removeThatKey_listAssoc(list,getClientIPString(descClient));
 }
 
@@ -180,10 +187,40 @@ char* getClientIPString(int descClient){
   return ip;
 }
 
-void SendListToThatClient(int descClient,struct listAssoc list){
-  char* ip=getclientipstring(descClient);
+void SendListToThatClient(int descClient,struct listAssoc* list){
+  char* ip=getClientIPString(descClient);
+  char* buffer=malloc(sizeof(char)*SIZE_BUFF);
 
+  ssize_t res1,res2;
   
-  
+  while(list!=NULL){
+    if(!strcmp(list->k,ip)){
+      continue;/*On n'envois pas la listes des fichiers de celui qui la demande*/
+    }
+
+    strcpy(buffer,list->k);
+    res1=send(descClient,buffer,SIZE_BUFF,0);//Reception du nom du ième pair
+    if(-1==res1){
+      fprintf(stderr,"problème send pair name, RefreshThatList : %s.\n",strerror(errno));
+      free(buffer);
+      close(descClient);
+      exit(EXIT_FAILURE);
+    }
+    
+    while(list->l!=NULL){
+      strcpy(buffer,list->l->v);
+      res2=send(descClient,buffer,SIZE_BUFF,0);//Reception du jème filename du ieme pair
+      if(-1==res2){
+	fprintf(stderr,"problème send fileName RefreshThatList : %s.\n",strerror(errno));
+	free(buffer);
+	close(descClient);
+	exit(EXIT_FAILURE);
+      }
+    }
+
+    list=list->next;
+  }
+
   free(ip);
+  free(buffer);
 }
