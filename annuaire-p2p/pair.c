@@ -69,7 +69,7 @@ int main(int argc,char** argv){
   uint16_t port=htons(atoi(argv[2]));
 
   DisAuServeurQueJeSuisPresent(servAddress,port);
-
+  
   pthread_t server;/*Lancement serveur*/
   struct servParam *sp=malloc(sizeof(struct servParam));
   sp->sock=createServerSocket(port+1);/*Pour ne pas etre sur le meme port que le serveur annuaire*/
@@ -77,38 +77,45 @@ int main(int argc,char** argv){
     fprintf(stderr,"problème creation thread serveur: %s.\n",strerror(errno));
   }
   
-
+  
   struct listAssoc* list=NULL;
   list=RefreshThatList(servAddress,port);
   DisplayListAssoc(list);
   int done=0;
-  int query;
+  int numPeer;
   struct listAssoc* peer=NULL;
   //struct list* file;
   do{
-    printf("\nR -> Refresh la liste de l'annuaire\nQ-> Quitte le reseau\n");
-    scanf("%d",&query);
-    switch((char)query){
+    printf("\nC -> Connecte à un pair\nR -> Refresh la liste de l'annuaire\nQ-> Quitte le reseau\n");
+    switch(fgetc(stdin)){
     case 'R':
       delete_listAssoc_and_key_and_values(list);
       list=RefreshThatList(servAddress,port);
       DisplayListAssoc(list);
       break;
+      
     case 'Q':
       done=1;
       break;
-    default:
-      if((peer=getIndex_listAssoc(list,query))){
-	printf("Connection au pair %d = %s",query,peer->k);
+      
+    case 'C':
+      printf("Entrez le numéro du pair correspondant à la liste.\n");
+      DisplayListAssoc(list);
+      scanf("%d",&numPeer);
+      if(getIndex_listAssoc(list,numPeer)){
+	printf("Connection au pair %d = %s.\n",numPeer,peer->k);
 	ConnectToThatPeer(peer);
       }
       else{
-	printf("Ce chiffre ne correspond pas à un pair\n");
-	printf("Commande non reconnue\n");
+	printf("Ce chiffre ne correspond pas à un pair.\n");
       }
       break;
+      
+    default:
+      printf("Commande non reconnue.\n");
+      break;
     }
-
+      
   }while(!done);
 
   delete_listAssoc_and_key_and_values(list);
