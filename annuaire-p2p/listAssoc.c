@@ -74,8 +74,7 @@ void DisplayList(struct list* l){
 
 struct list* getIndex_list_Aux(struct list* l,int index,int depth){
   if(l==NULL || depth>index){
-    fprintf(stderr,"getIndex on list out of range");
-    exit(EXIT_FAILURE);
+    return NULL;
   }
   else{
     if(index==depth){
@@ -191,8 +190,7 @@ void DisplayListAssoc(struct listAssoc* l){
 
 struct listAssoc* getIndex_listAssoc_Aux(struct listAssoc* l,int index,int depth){
   if(l==NULL || depth>index){/*DEVRAS RENVOYER NULL POUR CONTINUER LE TRAITEMENT*/
-    fprintf(stderr,"getIndex on listAssoc out of range");
-    exit(EXIT_FAILURE);
+    return NULL;
   }
   else{
     if(index==depth){

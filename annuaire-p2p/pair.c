@@ -25,9 +25,7 @@
 #include "listAssoc.h"
 #include "shared_define.h"
 
-
-
-char* SERV_ADDRESS;
+#define SIZE_QUERY 3/*Donc un maximum 999 pairs*/
 
 struct servParam{
   int sock;
@@ -39,19 +37,20 @@ struct servParam{
 /******************************************/
 
 /*Connection*/
-int ConnectToServ(uint16_t port);
+int ConnectToServ(char* servAddress,uint16_t port);
 void DisconnectFromServ(int sock);
 
 /*interaction Annuaire - pair*/
-void DisAuServeurQueJeSuisPresent(uint16_t port);
-void DisAuServeurQueJeQuitte(uint16_t port);
+void DisAuServeurQueJeSuisPresent(char* servAddress,uint16_t port);
+void DisAuServeurQueJeQuitte(char* servAddress,uint16_t port);
 void QueryTypeServ(int serv,char type);
-struct listAssoc* RefreshThatList(uint16_t port);
+struct listAssoc* RefreshThatList(char* servAddress,uint16_t port);
 
-/*Server side*/
+/*peer to peer side*/
 int createServerSocket(uint16_t port);
 void* IAMSERVEURNOW(void* param);
 void IAMNOLONGERSERVER();
+void ConnectToThatPeer(struct listAssoc* peer);
 
 /*Manipulation*/
 int LookForEnd(char s[],int size);
@@ -66,11 +65,10 @@ int main(int argc,char** argv){
     exit(EXIT_FAILURE);
   }
 
-  SERV_ADDRESS=argv[1];
+  char* servAddress=argv[1];
   uint16_t port=htons(atoi(argv[2]));
 
-  DisAuServeurQueJeSuisPresent(port);
-  
+  DisAuServeurQueJeSuisPresent(servAddress,port);
 
   pthread_t server;/*Lancement serveur*/
   struct servParam *sp=malloc(sizeof(struct servParam));
@@ -81,22 +79,33 @@ int main(int argc,char** argv){
   
 
   struct listAssoc* list=NULL;
-  list=RefreshThatList(port);
+  list=RefreshThatList(servAddress,port);
   DisplayListAssoc(list);
   int done=0;
+  int query;
+  struct listAssoc* peer=NULL;
+  //struct list* file;
   do{
     printf("\nR -> Refresh la liste de l'annuaire\nQ-> Quitte le reseau\n");
-    switch(fgetc(stdin)){
+    scanf("%d",&query);
+    switch((char)query){
     case 'R':
       delete_listAssoc_and_key_and_values(list);
-      list=RefreshThatList(port);
+      list=RefreshThatList(servAddress,port);
       DisplayListAssoc(list);
       break;
     case 'Q':
       done=1;
       break;
     default:
-      printf("Commande non reconnue\n");
+      if((peer=getIndex_listAssoc(list,query))){
+	printf("Connection au pair %d = %s",query,peer->k);
+	ConnectToThatPeer(peer);
+      }
+      else{
+	printf("Ce chiffre ne correspond pas à un pair\n");
+	printf("Commande non reconnue\n");
+      }
       break;
     }
 
@@ -106,7 +115,7 @@ int main(int argc,char** argv){
   //free(list);
   IAMNOLONGERSERVER(sp->sock);
   printf("signal d'arret envoyé au serveur\n");
-  DisAuServeurQueJeQuitte(port);
+  DisAuServeurQueJeQuitte(servAddress,port);
   printf("J'ai dis au serveur annuaire que je partais\n");
 
   printf("Et j'attends que le serveur soit terminé (il attends que les envois soit finis)\n");
@@ -116,7 +125,7 @@ int main(int argc,char** argv){
   return 0;
 }
 
-int ConnectToServ(uint16_t port){
+int ConnectToServ(char* servAddress,uint16_t port){
   int sock=socket(PF_INET,SOCK_STREAM,0);//création de la socket
   if(sock==-1){fprintf(stderr,"Probleme ConnectToserv socket() : %s.\n",strerror(errno));exit(EXIT_FAILURE);}
   
@@ -124,7 +133,7 @@ int ConnectToServ(uint16_t port){
   memset(&addr,0,sizeof(struct sockaddr));
   addr.sin_family=AF_INET;
 
-  int checkReturn=inet_pton(AF_INET,SERV_ADDRESS,&(addr.sin_addr));
+  int checkReturn=inet_pton(AF_INET,servAddress,&(addr.sin_addr));
   if (checkReturn==0 || checkReturn==-1){
     fprintf(stderr, "ConnectToServ : Adresse fournie format incorrect ; %s.\n",strerror(errno));
     DisconnectFromServ(sock);
@@ -180,8 +189,8 @@ int getIntFromServ(int serv){
   return r;
 }
 
-void DisAuServeurQueJeSuisPresent(uint16_t port){
-  int serv=ConnectToServ(port);
+void DisAuServeurQueJeSuisPresent(char* servAddress,uint16_t port){
+  int serv=ConnectToServ(servAddress,port);
 
   QueryTypeServ(serv,COMING);
   char *buffer=malloc(sizeof(char)*SIZE_BUFF);
@@ -244,8 +253,8 @@ void QueryTypeServ(int serv,char type){
 }
 
 
-void DisAuServeurQueJeQuitte(uint16_t port){
-  int serv=ConnectToServ(port);  
+void DisAuServeurQueJeQuitte(char* servAddress,uint16_t port){
+  int serv=ConnectToServ(servAddress,port);
   
   QueryTypeServ(serv,LEAVING);
   
@@ -281,9 +290,8 @@ char* resize(char* s,int size){
 }
 
 
-struct listAssoc* RefreshThatList(uint16_t port){/*Not the most optimize, but that'll be enough*/
-    
-  int serv=ConnectToServ(port);
+struct listAssoc* RefreshThatList(char* servAddress,uint16_t port){/*Not the most optimize, but that'll be enough*/
+  int serv=ConnectToServ(servAddress,port);
   QueryTypeServ(serv,REFRESH);
   
   
@@ -396,4 +404,9 @@ void* IAMSERVEURNOW(void* param){
 
 void IAMNOLONGERSERVER(int sock){
   if(close(sock)==-1)fprintf(stderr,"problème close sockListen : %s.\n",strerror(errno));
+}
+
+
+void ConnectToThatPeer(struct listAssoc* peer){
+  
 }
