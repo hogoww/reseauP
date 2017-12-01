@@ -46,7 +46,7 @@ void DisconnectFromServ(int sock);
 void DisAuServeurQueJeSuisPresent(uint16_t port);
 void DisAuServeurQueJeQuitte(uint16_t port);
 void QueryTypeServ(int serv,char type);
-struct listAssoc* RefreshThatList(uint16_t port,int NeedToQueryType);
+struct listAssoc* RefreshThatList(uint16_t port);
 
 /*Server side*/
 int createServerSocket(uint16_t port);
@@ -81,16 +81,15 @@ int main(int argc,char** argv){
   
 
   struct listAssoc* list=NULL;
-  list=RefreshThatList(port,1);
+  list=RefreshThatList(port);
   DisplayListAssoc(list);
   int done=0;
   do{
     printf("\nR -> Refresh la liste de l'annuaire\nQ-> Quitte le reseau\n");
-
     switch(fgetc(stdin)){
     case 'R':
-      free(list);
-      list=RefreshThatList(port,0);
+      delete_listAssoc_and_key_and_values(list);
+      list=RefreshThatList(port);
       DisplayListAssoc(list);
       break;
     case 'Q':
@@ -210,9 +209,6 @@ void DisAuServeurQueJeSuisPresent(uint16_t port){
       free(r);
     }
 
-    /*********************/
-    /*CHECK IF THAT WORKS*/
-    /*********************/
     buffer[0]='\0';
     ssize_t res=send(serv,buffer,0,0);//fin des fichiers à réceptionner.
     if(-1==res){
@@ -284,13 +280,12 @@ char* resize(char* s,int size){
   return res;
 }
 
-struct listAssoc* RefreshThatList(uint16_t port,int NeedToQueryType){/*Not the most optimize, but that'll be enough*/
+
+struct listAssoc* RefreshThatList(uint16_t port){/*Not the most optimize, but that'll be enough*/
     
   int serv=ConnectToServ(port);
+  QueryTypeServ(serv,REFRESH);
   
-  if(NeedToQueryType){
-    QueryTypeServ(serv,REFRESH);
-  }
   
   char* buffer=malloc(sizeof(char)*SIZE_BUFF);
 
@@ -298,7 +293,6 @@ struct listAssoc* RefreshThatList(uint16_t port,int NeedToQueryType){/*Not the m
   ssize_t res1,res2;
   
   do{
-    
     res1=recv(serv,buffer,SIZE_BUFF,0);//Reception du nom du ième pair
     if(-1==res1){
       fprintf(stderr,"problème recv pair name, RefreshThatList : %s.\n",strerror(errno));
@@ -307,11 +301,13 @@ struct listAssoc* RefreshThatList(uint16_t port,int NeedToQueryType){/*Not the m
       exit(EXIT_FAILURE);
     }
     
-    if(res2==0 || buffer[0]=='\0'){
+    if(res1==0 || buffer[0]=='\0'){
       break;
     }
 
     char* ip=resize(buffer,SIZE_BUFF);
+    printf("ip=%s\n",ip);
+
     if(!list){
       list=make_ListAssoc(ip);
     }
@@ -331,16 +327,17 @@ struct listAssoc* RefreshThatList(uint16_t port,int NeedToQueryType){/*Not the m
 	break;
       }
       
+      printf("recv filename %s\n",buffer);
       char* fileName=resize(buffer,SIZE_BUFF);
-      add_value_list(lt,fileName);
+      lt=add_value_list(lt,fileName);
     }while(1);
-
+    
     destroyAndChangeList_listAssoc(list,ip,lt);
 
   }while(1);
 
   free(buffer);
-
+  
   DisconnectFromServ(serv);
   return list;
 }

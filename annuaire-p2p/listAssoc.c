@@ -9,8 +9,10 @@ struct list* make_list(char* val){
 }
 
 void delete_list(struct list* l){/*free only "next"s pointers*/
-  if(l->next!=NULL)
-    delete_list(l->next);
+  if(!l){
+    return;
+  }
+  delete_list(l->next);
   free(l);
 }
 
@@ -110,12 +112,11 @@ void delete_listAssoc(struct listAssoc* l){/*free only "next"s pointers*/
 }
 
 void delete_listAssoc_and_key_and_values(struct listAssoc* l){
-
-  if(l->next!=NULL)
-    delete_listAssoc_and_key_and_values(l->next);
-  if(l->l==NULL){
-    delete_list_and_values(l->l);
+  if(l==NULL){
+    return;
   }
+  delete_listAssoc_and_key_and_values(l->next);
+  delete_list_and_values(l->l);
   free(l->k);
   free(l);
 }
@@ -166,9 +167,9 @@ int size_listAssoc(struct listAssoc*l){
 }
 
 void DisplayListAssoc_Aux(struct listAssoc* list,int currentNum){
-  printf("Displaying listAssoc\n");
+  //printf("Displaying listAssoc\n");
   if(list==NULL){
-    printf("empty\n");
+    //printf("empty\n");
     return;
   }
   else{
@@ -211,13 +212,13 @@ struct listAssoc* getIndex_listAssoc(struct listAssoc* l,int index){
 struct listAssoc* destroyAndChangeList_listAssoc(struct listAssoc* l,char* key,struct list * li){
   struct listAssoc* t;
   if(l==NULL){
-    t=make_ListAssoc(key);
+    t=l=make_ListAssoc(key);
   }
   else{
     t=get_key_listAssoc(l,key);
   }
-  printf("%s\n",key);
-  DisplayList(li);
+  /* printf("%s\n",key); */
+  /* DisplayList(li); */
   if(t->l){
     delete_list_and_values(t->l);
   }
@@ -229,32 +230,42 @@ struct listAssoc* removeThatKey_listAssoc(struct listAssoc* l,char *key){
   if(l==NULL){
     return NULL;
   }
-
-  struct listAssoc *base=l;
-
-  while(l->next){
-    if(!strcmp(key,l->next->k)){
-      break;
-    }
-    else{
-      l=l->next;
-    }
-  }
-
-  if(l->next==NULL){
-    fprintf(stderr,"La liste ne contiens pas la clée %s\n",key);
-    return base;
+  
+  struct listAssoc* res=l;
+  if(!strcmp(key,l->k)){
+    res=l->next;
+    delNode_listAssoc(l);
+    return res;
   }
   else{
-    struct listAssoc* t=l->next;    
-    l->next=t->next;
-    delNode_listAssoc(t);
-    return base;
+    
+    while(l->next){
+      if(!strcmp(key,l->next->k)){
+	break;
+      }
+      else{
+	l=l->next;
+      }
+    }
+    
+    if(l==NULL){
+      fprintf(stderr,"La liste ne contiens pas la clée %s\n",key);
+    }
+    else{
+      struct listAssoc* t=l->next;
+      if(t){
+	l->next=t->next;
+      }
+      delNode_listAssoc(t);
+    }
+    return res;
   }
-  
 }
 
 void delNode_listAssoc(struct listAssoc *l){
-  free(l->k);
-  delete_list_and_values(l->l);
+  if(l){
+    free(l->k);
+    delete_list_and_values(l->l);
+    free(l);
+  }
 }
