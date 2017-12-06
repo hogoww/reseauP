@@ -50,7 +50,7 @@ struct listAssoc* RefreshThatList(char* servAddress,uint16_t port);
 int createServerSocket(uint16_t port);
 void* IAMSERVEURNOW(void* param);
 void IAMNOLONGERSERVER();
-void ConnectToThatPeer(struct listAssoc* peer);
+void ConnectToThatPeer(struct listAssoc* peer,uint16_t port);
 
 /*Manipulation*/
 int LookForEnd(char s[],int size);
@@ -93,7 +93,6 @@ int main(int argc,char** argv){
       list=RefreshThatList(servAddress,port);
       DisplayListAssoc(list);
       break;
-      
     case 'Q':
       done=1;
       break;
@@ -104,9 +103,10 @@ int main(int argc,char** argv){
       scanf("%d",&numPeer);
       if(getIndex_listAssoc(list,numPeer)){
 	printf("Connection au pair %d = %s.\n",numPeer,peer->k);
-	ConnectToThatPeer(peer);
+	ConnectToThatPeer(peer,port+1);/*pour ne pas etre au meme niveau que l'accés à l'annuaire*/
       }
       else{
+	fgetc(stdin);//Pour flush le buffer, scanf laisse un caractère dedans.
 	printf("Ce chiffre ne correspond pas à un pair.\n");
       }
       break;
@@ -395,6 +395,7 @@ void* IAMSERVEURNOW(void* param){
     int x=accept(p->sock,NULL,NULL);
     printf("accept %d \n",x);
     
+    printf("J'attends qu'il se déconnecte quelque chose avant de m'occuper du suivant.\n(Il n'est pas précisé dans les specs qu'on doit pouvoir en traiter plusieurs à la fois)\n");
     ssize_t res=recv(x,buffer,SIZE_BUFF,0);//Reception du nom
     if(-1==res){
       fprintf(stderr,"problème recv fileName : %s.\n",strerror(errno));
@@ -402,10 +403,12 @@ void* IAMSERVEURNOW(void* param){
       close(x);
       exit(EXIT_FAILURE);
     }
+    printf("finis avec client %d",x);
     if(res==0){/*Pas d'octet reçu, Pas protocolaire, donc le main à clos la socket listen*/
       pthread_exit(NULL);
     }
   }
+  free(buffer);
 }
 
 
@@ -414,6 +417,11 @@ void IAMNOLONGERSERVER(int sock){
 }
 
 
-void ConnectToThatPeer(struct listAssoc* peer){
+void ConnectToThatPeer(struct listAssoc* peer,uint16_t port){
+  int serv=ConnectToServ(peer->k,port);
   
+  printf("Appuyez sur une touche pour vous déconnecter.\n");
+  getchar();
+  
+  DisconnectFromServ(serv);
 }
