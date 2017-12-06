@@ -89,6 +89,7 @@ int main(int argc,char** argv){
     printf("\nC -> Connecte à un pair\nR -> Refresh la liste de l'annuaire\nQ-> Quitte le reseau\n");
     switch(fgetc(stdin)){
     case 'R':
+      printf("Refresh de la liste des pairs\n");
       delete_listAssoc_and_key_and_values(list);
       list=RefreshThatList(servAddress,port);
       DisplayListAssoc(list);
