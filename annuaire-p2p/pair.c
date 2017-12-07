@@ -86,30 +86,34 @@ int main(int argc,char** argv){
   struct listAssoc* peer=NULL;
   //struct list* file;
   do{
-    printf("\nC -> Connecte à un pair\nR -> Refresh la liste de l'annuaire\nQ-> Quitte le reseau\n");
+    printf("\nC -> Connecte à un pair\nR -> Refresh la liste de l'annuaire\nQ -> Quitte le reseau\n");
     
     switch(fgetc(stdin)){
-      fgetc(stdin);//remove the input char
+      fgetc(stdin);
+    case 'r':
     case 'R':
+      fgetc(stdin);
       printf("Refresh de la liste des pairs\n");
       delete_listAssoc_and_key_and_values(list);
       list=RefreshThatList(servAddress,port);
       DisplayListAssoc(list);
       break;
+    case 'q':
     case 'Q':
       done=1;
       break;
-      
+    case 'c':
     case 'C':
       printf("Entrez le numéro du pair correspondant à la liste.\n");
       DisplayListAssoc(list);
       scanf("%d",&numPeer);
-      if(getIndex_listAssoc(list,numPeer)){
+      fgetc(stdin);
+      fflush(stdin);
+      if((peer=getIndex_listAssoc(list,numPeer))){
 	printf("Connection au pair %d = %s.\n",numPeer,peer->k);
 	ConnectToThatPeer(peer,port+1);/*pour ne pas etre au meme niveau que l'accés à l'annuaire*/
       }
       else{
-	fgetc(stdin);//Pour flush le buffer, scanf laisse un caractère dedans.
 	printf("Ce chiffre ne correspond pas à un pair.\n");
       }
       break;
@@ -124,9 +128,9 @@ int main(int argc,char** argv){
   delete_listAssoc_and_key_and_values(list);
   //free(list);
   IAMNOLONGERSERVER(sp->sock);
-  printf("signal d'arret envoyé au serveur\n");
+  printf("signal d'arret envoyé au serveur.\n");
   DisAuServeurQueJeQuitte(servAddress,port);
-  printf("J'ai dis au serveur annuaire que je partais\n");
+  printf("J'ai dis au serveur annuaire que je partais.\n");
 
   printf("Et j'attends que le serveur soit terminé (il attends que les envois soit finis)\n");
   //pthread_join(server,NULL);
@@ -394,7 +398,9 @@ void* IAMSERVEURNOW(void* param){
   struct servParam* p=(struct servParam*)param;
   
   char* buffer=malloc(sizeof(char)*SIZE_BUFF);
+  printf("Server thread standing by !\n");
   while(1){
+    printf("waiting for new client\n");
     int x=accept(p->sock,NULL,NULL);
     printf("accept %d \n",x);
     
@@ -406,7 +412,7 @@ void* IAMSERVEURNOW(void* param){
       close(x);
       exit(EXIT_FAILURE);
     }
-    printf("finis avec client %d",x);
+    printf("finis avec client %d\n",x);
     if(res==0){/*Pas d'octet reçu, Pas protocolaire, donc le main à clos la socket listen*/
       pthread_exit(NULL);
     }
@@ -422,9 +428,13 @@ void IAMNOLONGERSERVER(int sock){
 
 void ConnectToThatPeer(struct listAssoc* peer,uint16_t port){
   int serv=ConnectToServ(peer->k,port);
+
   
-  printf("Appuyez sur une touche pour vous déconnecter.\n");
-  getchar();
+  printf("appuyez sur la touche entrée pour vous déconnecter.\n");
+  char* b=malloc(1024);
+  fgets(b,1024,stdin);
+  free(b);
+  printf("Vous allez manquer à %s :(",peer->k);
   
   DisconnectFromServ(serv);
 }
