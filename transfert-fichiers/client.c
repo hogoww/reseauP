@@ -18,7 +18,7 @@
 
 int main(int argc,char** argv){
   if(argc!=4){//Vérification nombre d'arguments
-    fprintf(stderr,"usage : ./main adresse port fileName\n");
+    fprintf(stderr,"usage : ./client adresse port fileName\n");
     exit(EXIT_FAILURE);
   }
   

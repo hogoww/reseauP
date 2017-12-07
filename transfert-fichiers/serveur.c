@@ -41,7 +41,7 @@ void sigINT_handler(int signo){
 
 int main(int argc,char** argv){
   if(argc!=2){//Verification du nombre d'arguments
-    fprintf(stderr,"usage : ./main port\n");
+    fprintf(stderr,"usage : ./serveur port\n");
     exit(EXIT_FAILURE);
   }
 
