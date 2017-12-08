@@ -15,8 +15,9 @@
 #include <string.h>
 #include <errno.h>
 
-/*Manipulation dossier*/
+/*Manipulation dossier/fichiers*/
 #include <dirent.h>
+#include <sys/stat.h>
 
 /*Threading*/
 #include <pthread.h>
@@ -25,16 +26,21 @@
 #include "listAssoc.h"
 #include "shared_define.h"
 
-#define SIZE_QUERY 3/*Donc un maximum 999 pairs*/
+
 
 struct servParam{
   int sock;
-  /*TO DO*/
 };
 
-/******************************************/
-/*MODIFY PARAMETER TO INCLUDE SERV ADDRESS*/
-/******************************************/
+struct dllFile{
+  char* adresse;
+  uint16_t port;
+  char *file;
+};
+
+struct sendFile{
+  int sock;
+};
 
 /*Connection*/
 int ConnectToServ(char* servAddress,uint16_t port);
@@ -51,6 +57,7 @@ int createServerSocket(uint16_t port);
 void* IAMSERVEURNOW(void* param);
 void IAMNOLONGERSERVER();
 void ConnectToThatPeer(struct listAssoc* peer,uint16_t port);
+void* getFileFromThatPeer(void* param);
 
 /*Manipulation*/
 int LookForEnd(char s[],int size);
@@ -77,6 +84,13 @@ int main(int argc,char** argv){
     fprintf(stderr,"problème creation thread serveur: %s.\n",strerror(errno));
   }
   
+
+  int check=chdir("./reception");//On se met dans le bon dossier de reception
+  if(check==-1){
+    fprintf(stderr,"problème chdir : %s.\n",strerror(errno));
+    exit(EXIT_FAILURE);
+  }
+
   
   struct listAssoc* list=NULL;
   list=RefreshThatList(servAddress,port);
@@ -104,15 +118,28 @@ int main(int argc,char** argv){
       printf("Entrez le numéro du pair correspondant à la liste.\n");
       DisplayListAssoc(list);
       scanf("%d",&numPeer);
-      if(getIndex_listAssoc(list,numPeer)){
-	printf("Connection au pair %d = %s.\n",numPeer,peer->k);
-	ConnectToThatPeer(peer,port+1);/*pour ne pas etre au meme niveau que l'accés à l'annuaire*/
+      if((peer=getIndex_listAssoc(list,numPeer))){
+	printf("Connection au pair %d = %s.\nQuel est le numero du fichier que vous souhaitez télécharger?\n",numPeer,peer->k);
+	int numfile;
+	scanf("%d",&numfile);
+	struct list* filename;
+	if((filename=getIndex_list(peer->l,numfile))){
+	  
+	  struct dllFile* p=malloc(sizeof(struct dllFile*));
+	  p->adresse=peer->k;
+	  p->port=port+1;
+	  p->file=filename->v;
+	  getFileFromThatPeer((void*)p);/*pour ne pas etre au meme niveau que l'accés à l'annuaire*/
+	}
+	else{
+	  printf("\n Numéro de fichier invalide.\n");
+	}
       }
       else{
-	fgetc(stdin);//Pour flush le buffer, scanf laisse un caractère dedans.
 	printf("Ce chiffre ne correspond pas à un pair.\n");
       }
       break;
+      fgetc(stdin);
       
     default:
       printf("Commande non reconnue.\n");
@@ -398,7 +425,6 @@ void* IAMSERVEURNOW(void* param){
     int x=accept(p->sock,NULL,NULL);
     printf("accept %d \n",x);
     
-    printf("J'attends qu'il se déconnecte quelque chose avant de m'occuper du suivant.\n(Il n'est pas précisé dans les specs qu'on doit pouvoir en traiter plusieurs à la fois)\n");
     ssize_t res=recv(x,buffer,SIZE_BUFF,0);//Reception du nom
     if(-1==res){
       fprintf(stderr,"problème recv fileName : %s.\n",strerror(errno));
@@ -406,6 +432,13 @@ void* IAMSERVEURNOW(void* param){
       close(x);
       exit(EXIT_FAILURE);
     }
+
+
+    /* struct stat st; */
+    /* stat(filename, &st); */
+    /* size = st.st_size; */
+
+
     printf("finis avec client %d",x);
     if(res==0){/*Pas d'octet reçu, Pas protocolaire, donc le main à clos la socket listen*/
       pthread_exit(NULL);
@@ -420,11 +453,97 @@ void IAMNOLONGERSERVER(int sock){
 }
 
 
-void ConnectToThatPeer(struct listAssoc* peer,uint16_t port){
-  int serv=ConnectToServ(peer->k,port);
+void* getFileFromThatPeer(void* param){
+
+  struct dllFile* p=(struct dllFile*)param;
+  int serv=ConnectToServ(p->adresse,p->port);
+
+  int len=0;
+  while(p->file!='\0'){len++;}//recherche taille du nom du fichier.
   
-  printf("Appuyez sur une touche pour vous déconnecter.\n");
-  getchar();
+  char* buffer=malloc(SIZE_BUFF*sizeof(char));
+  ssize_t res=send(serv,p->file,len+1,0);//Envois du nom du fichier au serveur.
+  if(-1==res){
+    fprintf(stderr,"problème sendName : %s.\n",strerror(errno));
+    DisconnectFromServ(serv);
+    free(buffer);
+    exit(EXIT_FAILURE);
+  }
+ 
   
-  DisconnectFromServ(serv);
+  FILE* fileToReceive=fopen(p->file,"w");//on ouvre en écriture le fichier que l'on va télécharger de ce serveur.
+  if(fileToReceive==NULL){
+    fprintf(stderr,"file failed to open %s : %s.\n",p->file,strerror(errno));
+    DisconnectFromServ(serv);
+    free(buffer);
+    exit(EXIT_FAILURE);
+  }
+
+  int* s=malloc(sizeof(int));
+  res=recv(serv,s,sizeof(int),0);//Reception d'un certain nombre d'octet.
+  if(-1==res){
+    fprintf(stderr,"problème recv size file : %s.\n",strerror(errno));
+    free(buffer);
+    free(s);
+    DisconnectFromServ(serv);
+    exit(EXIT_FAILURE);
+  }
+  int size=*s;
+  free(s);
+
+  int *done=malloc(sizeof(int));;
+  int som=0;//Nombre d'octet reçu.
+  while(1){//Boucle infinie, la condition de fin est géré dedans.
+    
+    ssize_t res=recv(serv,buffer,SIZE_BUFF,0);//Reception d'un certain nombre d'octet.
+    if(-1==res){
+      fprintf(stderr,"problème recv : %s.\n",strerror(errno));
+      free(buffer);
+      DisconnectFromServ(serv);
+      free(done);
+      exit(EXIT_FAILURE);
+    }
+
+
+    if(res!=0){//Et on l'écrit dans le fichier.
+      som+=res;//On ajoute le nombre d'octet reçu par le dernier envois du serveur.     
+      ssize_t r=fwrite(buffer,1,res,fileToReceive);
+      if(res!=r){//en verifiant qu'il n'y ai pas de problème du write
+	printf("Pas inscrit le meme nombre de characteres que ce que j'ai reçu\n");
+      }
+    }
+
+    res=recv(serv,done,sizeof(int),0);//Reception d'un certain nombre d'octet.
+    if(-1==res){
+      fprintf(stderr,"problème recv done : %s.\n",strerror(errno));
+      free(buffer);
+      free(done);
+      DisconnectFromServ(serv);
+      exit(EXIT_FAILURE);
+    }
+    
+
+    if(*done)
+      break;
+  }
+  free(buffer);
+  free(done);
+  
+  if(som==size){//Output du nombre d'octect reçu
+    printf("%d octets received, fichier correctement reçu.\n",som);
+  }
+  else{
+    printf("Fichier de taille differente qu'annoncée, deletion de celui ci.\n");
+    remove(p->file);
+  }
+
+  DisconnectFromServ(serv);  
+  return NULL;
+}
+
+
+void* sendfile(void* param){
+  struct sendFile* p=(struct sendFile*)param;
+
+  return NULL;
 }

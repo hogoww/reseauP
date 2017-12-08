@@ -36,7 +36,6 @@ char* getClientIPString(int descClient);
 
 char* buffer=NULL;
 int sockListen;
-int receiving=0;
 
 
 int main(int argc,char** argv){
@@ -53,7 +52,7 @@ int main(int argc,char** argv){
   uint16_t port=htons(atoi(argv[1]));
 
   int sockListen=socket(PF_INET,SOCK_STREAM,0);//création de la socket
-
+  
   struct sockaddr_in addr;//et remplissage
   memset(&addr,0,sizeof(addr));
   addr.sin_family=AF_INET;
@@ -106,15 +105,8 @@ int main(int argc,char** argv){
 
 void sigINT_handler(int signo){
   if(signo == SIGINT){
-    if(receiving){//fermeture dans le fils si il est en train de travailler
-    }//Et fermeture du reste sinon (père + fils)
-    else{
-      printf("\nClosing, have a nice day :)\n");
-    }
+    printf("\nClosing, have a nice day :)\n");  
     close(sockListen);
-    /* if(buffer!=NULL){ */
-    /*   free(buffer); */
-    /* } */
     exit(EXIT_SUCCESS);
   }
 }

@@ -32,9 +32,6 @@ struct servParam{
   /*TO DO*/
 };
 
-/******************************************/
-/*MODIFY PARAMETER TO INCLUDE SERV ADDRESS*/
-/******************************************/
 
 /*Connection*/
 int ConnectToServ(char* servAddress,uint16_t port);
