@@ -1,4 +1,4 @@
-FLAGS = -Wall -ansi -pedantic -std=c99
+FLAGS = -Wall 
 POSTFLAGS= -lpthread
 all:
 	gcc $(FLAGS) -c	listAssoc.c $(POSTFLAGS)

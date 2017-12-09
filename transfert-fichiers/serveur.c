@@ -82,7 +82,7 @@ int main(int argc,char** argv){
     exit(EXIT_FAILURE);
   }
   
-
+  char* fileName;
   while(1){//On commence la boucle infinie de reception, qui ne se termineras Proprement que sur un sigINT (ctrl + c)
     
     printf("waiting for a new client\n");
@@ -117,13 +117,14 @@ int main(int argc,char** argv){
       j++;
     }
     
-    char* fileName=malloc(sizeof(char)*j);
+    fileName=malloc(sizeof(char)*j+1);
     
     ssize_t i=0;
     while(buffer[i]!='\0'){
       fileName[i]=buffer[i];
       i++;
     }
+    fileName[j]='\0';
     
     
     printf("\n%s\n",fileName);//Notification sur la sortie standards du nom du fichier à envoyer
@@ -143,10 +144,9 @@ int main(int argc,char** argv){
       i=0;
       while(i<SIZE_BUFF){//On remplis le buffer.
 	c=fgetc(fileToSend);
-	buffer[i]=c;
-	if(feof(fileToSend)){//Jusqu'à rencontrer la fin du fichier.
+	if(c==EOF)
 	  break;
-	}
+	buffer[i]=c;
 	i++;
       }
 

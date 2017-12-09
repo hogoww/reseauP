@@ -11,6 +11,10 @@
 #include <arpa/inet.h>
 #include <netdb.h>
 
+/*IPC*/
+#include <sys/ipc.h>
+#include <sys/msg.h>
+
 /*erreur*/
 #include <string.h>
 #include <errno.h>
@@ -38,8 +42,14 @@ struct dllFile{
   char *file;
 };
 
-struct sendFile{
+struct sendpart{
   int sock;
+  int msgid;
+};
+
+struct msgend{
+  long label;
+  pthread_t pid;
 };
 
 /*Connection*/
@@ -58,6 +68,7 @@ void* IAMSERVEURNOW(void* param);
 void IAMNOLONGERSERVER();
 void ConnectToThatPeer(struct listAssoc* peer,uint16_t port);
 void* getFileFromThatPeer(void* param);
+void* sendfile(void* param);
 
 /*Manipulation*/
 int LookForEnd(char s[],int size);
@@ -87,7 +98,7 @@ int main(int argc,char** argv){
 
   int check=chdir("./reception");//On se met dans le bon dossier de reception
   if(check==-1){
-    fprintf(stderr,"problème chdir : %s.\n",strerror(errno));
+    fprintf(stderr,"problème chdir into reception : %s.\n",strerror(errno));
     exit(EXIT_FAILURE);
   }
 
@@ -104,16 +115,18 @@ int main(int argc,char** argv){
     
     switch(fgetc(stdin)){
       fgetc(stdin);//remove the input char
+    case 'r':
     case 'R':
       printf("Refresh de la liste des pairs\n");
       delete_listAssoc_and_key_and_values(list);
       list=RefreshThatList(servAddress,port);
       DisplayListAssoc(list);
       break;
+    case 'q':
     case 'Q':
       done=1;
       break;
-      
+    case 'c':
     case 'C':
       printf("Entrez le numéro du pair correspondant à la liste.\n");
       DisplayListAssoc(list);
@@ -417,42 +430,6 @@ int createServerSocket(uint16_t port){
   return sockListen;
 }
 
-void* IAMSERVEURNOW(void* param){
-  struct servParam* p=(struct servParam*)param;
-  
-  char* buffer=malloc(sizeof(char)*SIZE_BUFF);
-  while(1){
-    int x=accept(p->sock,NULL,NULL);
-    printf("accept %d \n",x);
-    
-    ssize_t res=recv(x,buffer,SIZE_BUFF,0);//Reception du nom
-    if(-1==res){
-      fprintf(stderr,"problème recv fileName : %s.\n",strerror(errno));
-      free(buffer);
-      close(x);
-      exit(EXIT_FAILURE);
-    }
-
-
-    /* struct stat st; */
-    /* stat(filename, &st); */
-    /* size = st.st_size; */
-
-
-    printf("finis avec client %d",x);
-    if(res==0){/*Pas d'octet reçu, Pas protocolaire, donc le main à clos la socket listen*/
-      pthread_exit(NULL);
-    }
-  }
-  free(buffer);
-}
-
-
-void IAMNOLONGERSERVER(int sock){
-  if(close(sock)==-1)fprintf(stderr,"problème close sockListen : %s.\n",strerror(errno));
-}
-
-
 void* getFileFromThatPeer(void* param){
 
   struct dllFile* p=(struct dllFile*)param;
@@ -462,6 +439,8 @@ void* getFileFromThatPeer(void* param){
   while(p->file!='\0'){len++;}//recherche taille du nom du fichier.
   
   char* buffer=malloc(SIZE_BUFF*sizeof(char));
+  int *done=malloc(sizeof(int));
+
   ssize_t res=send(serv,p->file,len+1,0);//Envois du nom du fichier au serveur.
   if(-1==res){
     fprintf(stderr,"problème sendName : %s.\n",strerror(errno));
@@ -470,15 +449,6 @@ void* getFileFromThatPeer(void* param){
     exit(EXIT_FAILURE);
   }
  
-  
-  FILE* fileToReceive=fopen(p->file,"w");//on ouvre en écriture le fichier que l'on va télécharger de ce serveur.
-  if(fileToReceive==NULL){
-    fprintf(stderr,"file failed to open %s : %s.\n",p->file,strerror(errno));
-    DisconnectFromServ(serv);
-    free(buffer);
-    exit(EXIT_FAILURE);
-  }
-
   int* s=malloc(sizeof(int));
   res=recv(serv,s,sizeof(int),0);//Reception d'un certain nombre d'octet.
   if(-1==res){
@@ -490,60 +460,263 @@ void* getFileFromThatPeer(void* param){
   }
   int size=*s;
   free(s);
-
-  int *done=malloc(sizeof(int));;
-  int som=0;//Nombre d'octet reçu.
-  while(1){//Boucle infinie, la condition de fin est géré dedans.
-    
-    ssize_t res=recv(serv,buffer,SIZE_BUFF,0);//Reception d'un certain nombre d'octet.
-    if(-1==res){
-      fprintf(stderr,"problème recv : %s.\n",strerror(errno));
-      free(buffer);
+  
+  if(size!=0){//File doesn't exist    
+  
+    FILE* fileToReceive=fopen(p->file,"w");//on ouvre en écriture le fichier que l'on va télécharger de ce serveur.
+    if(fileToReceive==NULL){
+      fprintf(stderr,"file failed to open %s : %s.\n",p->file,strerror(errno));
       DisconnectFromServ(serv);
-      free(done);
+      free(buffer);
       exit(EXIT_FAILURE);
     }
 
 
-    if(res!=0){//Et on l'écrit dans le fichier.
-      som+=res;//On ajoute le nombre d'octet reçu par le dernier envois du serveur.     
-      ssize_t r=fwrite(buffer,1,res,fileToReceive);
-      if(res!=r){//en verifiant qu'il n'y ai pas de problème du write
-	printf("Pas inscrit le meme nombre de characteres que ce que j'ai reçu\n");
+
+    int som=0;//Nombre d'octet reçu.
+    while(1){//Boucle infinie, la condition de fin est géré dedans.
+    
+      ssize_t res=recv(serv,buffer,SIZE_BUFF,0);//Reception d'un certain nombre d'octet.
+      if(-1==res){
+	fprintf(stderr,"problème recv : %s.\n",strerror(errno));
+	free(buffer);
+	DisconnectFromServ(serv);
+	free(done);
+	exit(EXIT_FAILURE);
       }
-    }
 
-    res=recv(serv,done,sizeof(int),0);//Reception d'un certain nombre d'octet.
-    if(-1==res){
-      fprintf(stderr,"problème recv done : %s.\n",strerror(errno));
-      free(buffer);
-      free(done);
-      DisconnectFromServ(serv);
-      exit(EXIT_FAILURE);
-    }
+
+      if(res!=0){//Et on l'écrit dans le fichier.
+	som+=res;//On ajoute le nombre d'octet reçu par le dernier envois du serveur.     
+	ssize_t r=fwrite(buffer,1,res,fileToReceive);
+	if(res!=r){//en verifiant qu'il n'y ai pas de problème du write
+	  printf("Pas inscrit le meme nombre de characteres que ce que j'ai reçu\n");
+	}
+      }
+
+      res=recv(serv,done,sizeof(int),0);//Reception d'un certain nombre d'octet.
+      if(-1==res){
+	fprintf(stderr,"problème recv done : %s.\n",strerror(errno));
+	free(buffer);
+	free(done);
+	DisconnectFromServ(serv);
+	exit(EXIT_FAILURE);
+      }
     
 
-    if(*done)
-      break;
+      if(*done)
+	break;
+    }
+
+    if(som==size){//Output du nombre d'octect reçu
+      printf("%d octets received, fichier correctement reçu.\n",som);
+    }
+    else{
+      printf("Fichier de taille differente qu'annoncée, deletion de celui ci.\n");
+      remove(p->file);
+    }
   }
+  
   free(buffer);
   free(done);
-  
-  if(som==size){//Output du nombre d'octect reçu
-    printf("%d octets received, fichier correctement reçu.\n",som);
-  }
-  else{
-    printf("Fichier de taille differente qu'annoncée, deletion de celui ci.\n");
-    remove(p->file);
-  }
 
   DisconnectFromServ(serv);  
   return NULL;
 }
 
 
+void getThreads(int msgid,int* compteur,int waitflag){
+  struct msgend buff;
+  if(*compteur==0){
+    return;
+  }
+
+  while(*compteur>=0){
+    if(msgrcv(msgid,&buff,sizeof(struct msgend),0,waitflag)==-1){
+      if(errno==ENOMSG){
+	break;/*No other threads are done*/
+      }
+      else{
+	fprintf(stderr,"probleme récupération des threads finis : %s.\n",strerror(errno));
+	break;
+      }
+    }
+    pthread_join(buff.pid,NULL);
+    *compteur-=1;
+  }
+}
+
+void* IAMSERVEURNOW(void* param){
+  struct servParam* p=(struct servParam*)param;
+
+  int k=ftok("./Seed",12);
+  if(k==-1){fprintf(stderr,"ftok failed : %s.\n",strerror(errno));};
+  int id=msgget(k, IPC_CREAT | 0666);
+  
+
+  int check=chdir("./Seed");//On se met dans le bon dossier de reception
+  if(check==-1){
+    fprintf(stderr,"problème chdir into seed : %s.\n",strerror(errno));
+    exit(EXIT_FAILURE);
+  }
+
+  int compteur=0;
+  while(1){
+    int x=accept(p->sock,NULL,NULL);
+    getThreads(id,&compteur,IPC_NOWAIT);
+    if(x==-1){
+      fprintf(stderr,"Accept failed : %d - %s.\n",errno,strerror(errno));
+      break;
+    }
+    
+    if(x==0){
+      printf("server side done working.\n");
+    }
+    printf("accept %d \n",x); 
+    
+    struct sendpart *s=malloc(sizeof(struct sendpart));
+    s->sock=x;
+    s->msgid=id;
+    pthread_t t;/*don't need it*/
+    pthread_create(&t,NULL,sendfile,(void*)s);
+    compteur++;
+  }
+  getThreads(id,&compteur,0);
+  
+  if(-1==msgctl(id,IPC_RMID,NULL)){fprintf(stderr,"Probleme en essayant de détruire la file de message : %s",strerror(errno));}
+  
+  pthread_exit(NULL);
+}
+
+
+void IAMNOLONGERSERVER(int sock){
+  if(close(sock)==-1)fprintf(stderr,"problème close sockListen : %s.\n",strerror(errno));
+}
+
+
 void* sendfile(void* param){
-  struct sendFile* p=(struct sendFile*)param;
+  struct sendpart* p=(struct sendpart*)param;
+  free(param);
+  int descClient=p->sock;
+
+  char *buffer=malloc(sizeof(char)*SIZE_BUFF);//Préparation du buffer d'envois
+  
+  ssize_t res=recv(descClient,buffer,SIZE_BUFF,0);//Reception du nom
+  if(-1==res){
+    fprintf(stderr,"problème recv filename : %s.\n",strerror(errno));
+    free(buffer);
+    close(descClient);
+    exit(EXIT_FAILURE);
+  }
+
+  int j=0;
+  while(buffer[j]!='\0'){//calcul de la longueur du nom
+    j++;
+  }
+    
+  char* filename=malloc(sizeof(char)*j+1);
+    
+  ssize_t i=0;
+  while(buffer[i]!='\0'){
+    filename[i]=buffer[i];
+    i++;
+  }
+  filename[j]='\0';
+
+  int* s=malloc(sizeof(int));
+  struct stat st;
+  if(0==stat(filename, &st)){//File doesn't exist
+    printf("Fichier demandé : %s n'existe pas\n",filename);
+
+    *s=0;
+    res=send(descClient,s,sizeof(int),0);//signal de fichier_doesn't exist
+    if(-1==res){
+      fprintf(stderr,"problème send fichier %s n'existe pas : %s.\n",filename,strerror(errno));
+      close(descClient);
+      free(buffer);
+      free(s);
+      s=NULL;
+      buffer=NULL;
+      return NULL;
+    }
+    else{
+      free(s);
+    }
+  }
+  else{//File exist, on l'envoie
+    printf("Envois du fichier %s\n",filename);
+    *s=(int)st.st_size;
+    res=send(descClient,s,sizeof(int),0);//Envois taille du fichier
+    if(-1==res){
+      fprintf(stderr,"problème send fichier %s n'existe pas : %s.\n",filename,strerror(errno));
+      close(descClient);
+      free(buffer);
+      free(s);
+      return NULL;
+    }
+    
+      
+    FILE* fileToSend=fopen(filename,"r");//Ouverture du fichier.
+    if(fileToSend==NULL){//NOT SUPPOSED TO HAPPEND.
+      fprintf(stderr,"file failed to open even though it was supposed to exist : %s.\n",strerror(errno));
+      close(descClient);
+      free(buffer);
+      remove(filename);//On retire le fichier vide nouvellement créé.
+    }
+
+    int* done=malloc(sizeof(int));
+    int c;
+    while(*done==0){//sinon il envoit le fichier.
+      i=0;
+      while(i<SIZE_BUFF){//On remplis le buffer.
+	c=fgetc(fileToSend);
+	if(c==EOF){
+	  *done=1;
+	  break;
+	}
+	buffer[i]=c;
+	i++;/**************PAS SUPER SUR !****************/
+      }
+      
+      
+      res=send(descClient,buffer,i,0);//Et on l'envois, jusqu'à la taille maximale, ou la fin du fichier
+      if(-1==res){
+	fprintf(stderr,"problème send : %s.\n",strerror(errno));
+	close(descClient);
+	free(buffer);
+	free(filename);
+	free(done);
+	fclose(fileToSend);
+	exit(EXIT_FAILURE);
+      }
+      
+      
+      res=send(descClient,done,sizeof(int),0);//à chaque tour de boucle on dis si on a finis
+      if(-1==res){
+	fprintf(stderr,"problème send : %s.\n",strerror(errno));
+	close(descClient);
+	free(buffer);
+	free(done);
+	free(filename);
+	fclose(fileToSend);
+	exit(EXIT_FAILURE);
+      }
+    }
+
+    fclose(fileToSend);
+    printf("done sending a file.\n");
+    free(done);
+    close(descClient);
+  }
+
+  free(buffer);
+  free(filename);
+  
+  
+  struct msgend mess;
+  mess.label=1;/*doesn't matter*/
+  mess.pid=pthread_self();
+  msgsnd(p->msgid,(void*)&mess,sizeof(mess),0);
 
   return NULL;
 }
