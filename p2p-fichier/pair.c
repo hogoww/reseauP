@@ -34,6 +34,11 @@
 
 struct servParam{
   int sock;
+  pthread_t id_serv;
+  int* compteur;
+  int msgid;
+  pthread_mutex_t m;
+  int maxSend;
 };
 
 struct dllFile{
@@ -65,7 +70,7 @@ struct listAssoc* RefreshThatList(char* servAddress,uint16_t port);
 /*peer to peer side*/
 int createServerSocket(uint16_t port);
 void* IAMSERVEURNOW(void* param);
-void IAMNOLONGERSERVER();
+void IAMNOLONGERSERVER(struct servParam* s);
 void ConnectToThatPeer(struct listAssoc* peer,uint16_t port);
 void* getFileFromThatPeer(void* param);
 void* sendfile(void* param);
@@ -79,7 +84,7 @@ int getIntFromServ(int serv);
 
 int main(int argc,char** argv){
   if(argc!=3){/*Check arguments*/
-    fprintf(stderr,"\nUsage : ./p [adresse_annuaire] [Port_Annuaire] \n\n");
+    fprintf(stderr,"\nUsage : ./p [adresse_annuaire] [Port_Annuaire] [limite nombre d'envoies]\n\n");
     exit(EXIT_FAILURE);
   }
 
@@ -88,19 +93,28 @@ int main(int argc,char** argv){
 
   DisAuServeurQueJeSuisPresent(servAddress,port);
   
-  pthread_t server;/*Lancement serveur*/
   struct servParam *sp=malloc(sizeof(struct servParam));
+ 
+  pthread_mutex_init(&(sp->m),NULL);
+  
+  int k=0;
+  if((k=ftok("./Seed",12))==-1){fprintf(stderr,"ftok failed : %s.\n",strerror(errno));};
+
+  /*reset de la file de message*/
+  if((sp->msgid=msgget(k,IPC_CREAT | 0666))==-1){fprintf(stderr,"creation fille de message failed : %s.\n",strerror(errno));exit(EXIT_FAILURE);}
+  if(-1==msgctl(sp->msgid,IPC_RMID,NULL)){fprintf(stderr,"Probleme en essayant de détruire la file de message : %s",strerror(errno));}
+
+  if((sp->msgid=msgget(k,IPC_CREAT | IPC_EXCL | 0666))==-1){fprintf(stderr,"creation fille de message failed : %s.\n",strerror(errno));exit(EXIT_FAILURE);}
+  
   sp->sock=createServerSocket(port+1);/*Pour ne pas etre sur le meme port que le serveur annuaire*/
-  if(-1==pthread_create(&server,NULL,IAMSERVEURNOW,(void*)sp)){
+  sp->compteur=malloc(sizeof(int));
+  *(sp->compteur)=0;
+  sp->maxSend=atoi(argv[3]);
+  sp->id_serv=0;/*Not usefull inside IAMSERVEURNOW, but avoid undefined behavior*/
+  if(-1==pthread_create(&(sp->id_serv),NULL,IAMSERVEURNOW,(void*)sp)){
     fprintf(stderr,"problème creation thread serveur: %s.\n",strerror(errno));
   }
   
-
-  int check=chdir("./reception");//On se met dans le bon dossier de reception
-  if(check==-1){
-    fprintf(stderr,"problème chdir into reception : %s.\n",strerror(errno));
-    exit(EXIT_FAILURE);
-  }
 
   
   struct listAssoc* list=NULL;
@@ -135,6 +149,7 @@ int main(int argc,char** argv){
 	printf("Connection au pair %d = %s.\nQuel est le numero du fichier que vous souhaitez télécharger?\n",numPeer,peer->k);
 	int numfile;
 	scanf("%d",&numfile);
+	fgetc(stdin);//remove newline char
 	struct list* filename;
 	if((filename=getIndex_list(peer->l,numfile))){
 	  
@@ -143,6 +158,7 @@ int main(int argc,char** argv){
 	  p->port=port+1;
 	  p->file=filename->v;
 	  getFileFromThatPeer((void*)p);/*pour ne pas etre au meme niveau que l'accés à l'annuaire*/
+	  free(p);
 	}
 	else{
 	  printf("\n Numéro de fichier invalide.\n");
@@ -162,15 +178,18 @@ int main(int argc,char** argv){
   }while(!done);
 
   delete_listAssoc_and_key_and_values(list);
-  //free(list);
-  IAMNOLONGERSERVER(sp->sock);
-  printf("signal d'arret envoyé au serveur\n");
+
+
   DisAuServeurQueJeQuitte(servAddress,port);
   printf("J'ai dis au serveur annuaire que je partais\n");
-
-  printf("Et j'attends que le serveur soit terminé (il attends que les envois soit finis)\n");
-  //pthread_join(server,NULL);
-  printf("serveur eteint, bonne journée:)\n");
+  printf("J'envois le signal d'arret au serveur\n");
+  
+  pthread_mutex_lock(&(sp->m));
+  IAMNOLONGERSERVER(sp);
+  pthread_mutex_destroy(&(sp->m));
+  free(sp);
+  
+  printf("J'ai tout finis, bonne journée:)\n");
 
   return 0;
 }
@@ -431,7 +450,6 @@ int createServerSocket(uint16_t port){
 }
 
 void* getFileFromThatPeer(void* param){
-
   struct dllFile* p=(struct dllFile*)param;
   int serv=ConnectToServ(p->adresse,p->port);
 
@@ -446,6 +464,8 @@ void* getFileFromThatPeer(void* param){
     fprintf(stderr,"problème sendName : %s.\n",strerror(errno));
     DisconnectFromServ(serv);
     free(buffer);
+    free(done);
+    free(p);
     exit(EXIT_FAILURE);
   }
  
@@ -454,20 +474,39 @@ void* getFileFromThatPeer(void* param){
   if(-1==res){
     fprintf(stderr,"problème recv size file : %s.\n",strerror(errno));
     free(buffer);
+    free(done);
     free(s);
+    free(p);
     DisconnectFromServ(serv);
     exit(EXIT_FAILURE);
   }
   int size=*s;
   free(s);
-  
+
+  int i=0;
+  while(p->file[i]!='\0'){++i;}
   if(size!=0){//File doesn't exist    
-  
-    FILE* fileToReceive=fopen(p->file,"w");//on ouvre en écriture le fichier que l'on va télécharger de ce serveur.
+    char* filename=malloc(sizeof(char)*i+1+5);
+    filename[0]='S';
+    filename[1]='e';
+    filename[2]='e';
+    filename[3]='d';
+    filename[4]='/';
+    int j=5;
+    i=0;
+    while(p->file[i]!='\0'){
+      filename[j]=p->file[i];
+      ++i;++j;
+    }
+    filename[j]='\0';
+
+    FILE* fileToReceive=fopen(filename,"w");//on ouvre en écriture le fichier que l'on va télécharger de ce serveur.
     if(fileToReceive==NULL){
       fprintf(stderr,"file failed to open %s : %s.\n",p->file,strerror(errno));
       DisconnectFromServ(serv);
       free(buffer);
+      free(filename);
+      free(p);
       exit(EXIT_FAILURE);
     }
 
@@ -480,8 +519,10 @@ void* getFileFromThatPeer(void* param){
       if(-1==res){
 	fprintf(stderr,"problème recv : %s.\n",strerror(errno));
 	free(buffer);
-	DisconnectFromServ(serv);
 	free(done);
+	free(p);
+	free(filename);
+	DisconnectFromServ(serv);
 	exit(EXIT_FAILURE);
       }
 
@@ -490,7 +531,7 @@ void* getFileFromThatPeer(void* param){
 	som+=res;//On ajoute le nombre d'octet reçu par le dernier envois du serveur.     
 	ssize_t r=fwrite(buffer,1,res,fileToReceive);
 	if(res!=r){//en verifiant qu'il n'y ai pas de problème du write
-	  printf("Pas inscrit le meme nombre de characteres que ce que j'ai reçu\n");
+	  printf("weird write\n");
 	}
       }
 
@@ -498,6 +539,8 @@ void* getFileFromThatPeer(void* param){
       if(-1==res){
 	fprintf(stderr,"problème recv done : %s.\n",strerror(errno));
 	free(buffer);
+	free(filename);
+	free(p);
 	free(done);
 	DisconnectFromServ(serv);
 	exit(EXIT_FAILURE);
@@ -513,7 +556,7 @@ void* getFileFromThatPeer(void* param){
     }
     else{
       printf("Fichier de taille differente qu'annoncée, deletion de celui ci.\n");
-      remove(p->file);
+      remove(filename);
     }
   }
   
@@ -525,14 +568,14 @@ void* getFileFromThatPeer(void* param){
 }
 
 
-void getThreads(int msgid,int* compteur,int waitflag){
+void getThreads(struct servParam* s,int waitflag){
   struct msgend buff;
-  if(*compteur==0){
+  if(*(s->compteur)==0){
     return;
   }
 
-  while(*compteur>=0){
-    if(msgrcv(msgid,&buff,sizeof(struct msgend),0,waitflag)==-1){
+  while(*(s->compteur)>-1){
+    if(msgrcv(s->msgid,&buff,sizeof(struct msgend),0,waitflag)==-1){
       if(errno==ENOMSG){
 	break;/*No other threads are done*/
       }
@@ -541,62 +584,67 @@ void getThreads(int msgid,int* compteur,int waitflag){
 	break;
       }
     }
+    pthread_mutex_lock(&(s->m));
     pthread_join(buff.pid,NULL);
-    *compteur-=1;
+    *(s->compteur)-=1;
+    pthread_mutex_unlock(&(s->m));
   }
+}
+
+void getOneThread(struct servParam* s){
+  struct msgend buff;
+  if(msgrcv(s->msgid,&buff,sizeof(struct msgend),0,0)==-1){fprintf(stderr,"probleme récupération des threads finis : %s.\n",strerror(errno));}
+  pthread_mutex_lock(&(s->m));
+  pthread_join(buff.pid,NULL);
+  *(s->compteur)-=1;
+  pthread_mutex_unlock(&(s->m));
 }
 
 void* IAMSERVEURNOW(void* param){
   struct servParam* p=(struct servParam*)param;
-
-  int k=ftok("./Seed",12);
-  if(k==-1){fprintf(stderr,"ftok failed : %s.\n",strerror(errno));};
-  int id=msgget(k, IPC_CREAT | 0666);
   
-
-  int check=chdir("./Seed");//On se met dans le bon dossier de reception
-  if(check==-1){
-    fprintf(stderr,"problème chdir into seed : %s.\n",strerror(errno));
-    exit(EXIT_FAILURE);
-  }
-
-  int compteur=0;
+  pthread_t t;/*don't need it with that algorithm*/
+  int x;
   while(1){
-    int x=accept(p->sock,NULL,NULL);
-    getThreads(id,&compteur,IPC_NOWAIT);
-    if(x==-1){
+    if(*(p->compteur)>p->maxSend){
+      getOneThread(p);
+    }
+    
+    if(-1==(x=accept(p->sock,NULL,NULL)))
       fprintf(stderr,"Accept failed : %d - %s.\n",errno,strerror(errno));
-      break;
-    }
     
-    if(x==0){
-      printf("server side done working.\n");
-    }
+    getThreads(p,IPC_NOWAIT);//On verifie si certains thread on finis de bosser, pour éviter de trop flood
+    
     printf("accept %d \n",x); 
-    
     struct sendpart *s=malloc(sizeof(struct sendpart));
     s->sock=x;
-    s->msgid=id;
-    pthread_t t;/*don't need it*/
+    s->msgid=p->msgid;
+
+    pthread_mutex_lock(&(p->m));
     pthread_create(&t,NULL,sendfile,(void*)s);
-    compteur++;
+    *(p->compteur)+=1;
+    pthread_mutex_unlock(&(p->m));
+    free(s);
   }
-  getThreads(id,&compteur,0);
   
-  if(-1==msgctl(id,IPC_RMID,NULL)){fprintf(stderr,"Probleme en essayant de détruire la file de message : %s",strerror(errno));}
-  
-  pthread_exit(NULL);
+  pthread_exit(NULL);//cancel dans le main thread, n'arriveras jamais ici.
 }
 
 
-void IAMNOLONGERSERVER(int sock){
-  if(close(sock)==-1)fprintf(stderr,"problème close sockListen : %s.\n",strerror(errno));
+void IAMNOLONGERSERVER(struct servParam* s){
+  if(pthread_cancel(s->id_serv)==-1)fprintf(stderr,"problème close sockListen : %s.\n",strerror(errno));
+  if(close(s->sock)==-1)fprintf(stderr,"problème close sockListen : %s.\n",strerror(errno));
+
+  printf("J'attends que toutes les taches du serveurs soient finies.\n");
+  getThreads(s,0);
+  free(s->compteur);
+  
+  if(-1==msgctl(s->msgid,IPC_RMID,NULL)){fprintf(stderr,"Probleme en essayant de détruire la file de message : %s",strerror(errno));}
 }
 
 
 void* sendfile(void* param){
   struct sendpart* p=(struct sendpart*)param;
-  free(param);
   int descClient=p->sock;
 
   char *buffer=malloc(sizeof(char)*SIZE_BUFF);//Préparation du buffer d'envois
@@ -605,6 +653,7 @@ void* sendfile(void* param){
   if(-1==res){
     fprintf(stderr,"problème recv filename : %s.\n",strerror(errno));
     free(buffer);
+    free(param);
     close(descClient);
     exit(EXIT_FAILURE);
   }
@@ -614,14 +663,23 @@ void* sendfile(void* param){
     j++;
   }
     
-  char* filename=malloc(sizeof(char)*j+1);
-    
-  ssize_t i=0;
+  char* filename=malloc(sizeof(char)*j+1+10);
+  filename[0]='r';
+  filename[1]='e';
+  filename[2]='c';
+  filename[3]='e';
+  filename[4]='p';
+  filename[5]='t';
+  filename[6]='i';
+  filename[7]='o';
+  filename[8]='n';
+  filename[9]='/';
+  ssize_t i=5;
   while(buffer[i]!='\0'){
     filename[i]=buffer[i];
     i++;
   }
-  filename[j]='\0';
+  filename[i]='\0';
 
   int* s=malloc(sizeof(int));
   struct stat st;
@@ -635,9 +693,6 @@ void* sendfile(void* param){
       close(descClient);
       free(buffer);
       free(s);
-      s=NULL;
-      buffer=NULL;
-      return NULL;
     }
     else{
       free(s);
@@ -648,11 +703,11 @@ void* sendfile(void* param){
     *s=(int)st.st_size;
     res=send(descClient,s,sizeof(int),0);//Envois taille du fichier
     if(-1==res){
-      fprintf(stderr,"problème send fichier %s n'existe pas : %s.\n",filename,strerror(errno));
+      fprintf(stderr,"problème send fichier %s existe pas : %s.\n",filename,strerror(errno));
       close(descClient);
       free(buffer);
       free(s);
-      return NULL;
+      exit(EXIT_FAILURE);
     }
     
       
@@ -686,6 +741,7 @@ void* sendfile(void* param){
 	free(buffer);
 	free(filename);
 	free(done);
+	free(param);
 	fclose(fileToSend);
 	exit(EXIT_FAILURE);
       }
@@ -698,6 +754,7 @@ void* sendfile(void* param){
 	free(buffer);
 	free(done);
 	free(filename);
+	free(param);
 	fclose(fileToSend);
 	exit(EXIT_FAILURE);
       }
@@ -717,6 +774,5 @@ void* sendfile(void* param){
   mess.label=1;/*doesn't matter*/
   mess.pid=pthread_self();
   msgsnd(p->msgid,(void*)&mess,sizeof(mess),0);
-
   return NULL;
 }

@@ -104,6 +104,7 @@ int main(int argc,char** argv){
 
 void sigINT_handler(int signo){
   if(signo == SIGINT){
+    printf("Arret propre du serveur, bonne journée :)\n");
     close(sockListen);
     exit(EXIT_SUCCESS);
   }

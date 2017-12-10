@@ -25,11 +25,10 @@
 #include "listAssoc.h"
 #include "shared_define.h"
 
-#define SIZE_QUERY 3/*Donc un maximum 999 pairs*/
-
 struct servParam{
   int sock;
-  /*TO DO*/
+  pthread_t id_serv;
+  char* buffer;
 };
 
 
@@ -46,7 +45,7 @@ struct listAssoc* RefreshThatList(char* servAddress,uint16_t port);
 /*peer to peer side*/
 int createServerSocket(uint16_t port);
 void* IAMSERVEURNOW(void* param);
-void IAMNOLONGERSERVER();
+void IAMNOLONGERSERVER(struct servParam* p);
 void ConnectToThatPeer(struct listAssoc* peer,uint16_t port);
 
 /*Manipulation*/
@@ -70,10 +69,11 @@ int main(int argc,char** argv){
   pthread_t server;/*Lancement serveur*/
   struct servParam *sp=malloc(sizeof(struct servParam));
   sp->sock=createServerSocket(port+1);/*Pour ne pas etre sur le meme port que le serveur annuaire*/
+  sp->buffer=malloc(sizeof(char)*SIZE_BUFF);
   if(-1==pthread_create(&server,NULL,IAMSERVEURNOW,(void*)sp)){
     fprintf(stderr,"problème creation thread serveur: %s.\n",strerror(errno));
   }
-  
+  sp->id_serv=server;
   
   struct listAssoc* list=NULL;
   list=RefreshThatList(servAddress,port);
@@ -86,7 +86,7 @@ int main(int argc,char** argv){
     printf("\nC -> Connecte à un pair\nR -> Refresh la liste de l'annuaire\nQ -> Quitte le reseau\n");
     
     switch(fgetc(stdin)){
-      fgetc(stdin);
+      fgetc(stdin);/*Remove the newline char we don't need*/
     case 'r':
     case 'R':
       fgetc(stdin);
@@ -104,8 +104,7 @@ int main(int argc,char** argv){
       printf("Entrez le numéro du pair correspondant à la liste.\n");
       DisplayListAssoc(list);
       scanf("%d",&numPeer);
-      fgetc(stdin);
-      fflush(stdin);
+      fgetc(stdin);/*Remove the newline char we don't need*/
       if((peer=getIndex_listAssoc(list,numPeer))){
 	printf("Connection au pair %d = %s.\n",numPeer,peer->k);
 	ConnectToThatPeer(peer,port+1);/*pour ne pas etre au meme niveau que l'accés à l'annuaire*/
@@ -123,15 +122,12 @@ int main(int argc,char** argv){
   }while(!done);
 
   delete_listAssoc_and_key_and_values(list);
-  //free(list);
-  IAMNOLONGERSERVER(sp->sock);
-  printf("signal d'arret envoyé au serveur.\n");
+  IAMNOLONGERSERVER(sp);
+  printf("serveur arrété.\n");
   DisAuServeurQueJeQuitte(servAddress,port);
   printf("J'ai dis au serveur annuaire que je partais.\n");
 
-  printf("Et j'attends que le serveur soit terminé (il attends que les envois soit finis)\n");
-  //pthread_join(server,NULL);
-  printf("serveur eteint, bonne journée:)\n");
+  printf("J'ai tout finis, je m'arrète, bonne journée ! \n");
 
   return 0;
 }
@@ -394,32 +390,25 @@ int createServerSocket(uint16_t port){
 void* IAMSERVEURNOW(void* param){
   struct servParam* p=(struct servParam*)param;
   
-  char* buffer=malloc(sizeof(char)*SIZE_BUFF);
   printf("Server thread standing by !\n");
   while(1){
     printf("waiting for new client\n");
     int x=accept(p->sock,NULL,NULL);
-    printf("accept %d \n",x);
+    printf("accepté %d \n",x);
     
     printf("J'attends qu'il se déconnecte quelque chose avant de m'occuper du suivant.\n(Il n'est pas précisé dans les specs qu'on doit pouvoir en traiter plusieurs à la fois)\n");
-    ssize_t res=recv(x,buffer,SIZE_BUFF,0);//Reception du nom
-    if(-1==res){
-      fprintf(stderr,"problème recv fileName : %s.\n",strerror(errno));
-      free(buffer);
-      close(x);
-      exit(EXIT_FAILURE);
-    }
+    printf("Ne quittez pas svp\n");
+    if(-1==recv(x,p->buffer,SIZE_BUFF,0))//Attente passive, recv renveras 0 lorsque le client se seras déconnecté. 
+       fprintf(stderr,"problème receive serv : %s.\n",strerror(errno));
     printf("finis avec client %d\n",x);
-    if(res==0){/*Pas d'octet reçu, Pas protocolaire, donc le main à clos la socket listen*/
-      pthread_exit(NULL);
-    }
   }
-  free(buffer);
 }
 
 
-void IAMNOLONGERSERVER(int sock){
-  if(close(sock)==-1)fprintf(stderr,"problème close sockListen : %s.\n",strerror(errno));
+void IAMNOLONGERSERVER(struct servParam* s){
+  if(!pthread_cancel(s->id_serv))fprintf(stderr,"problème cancel thread serveur : %s.\n",strerror(errno));
+  if(close(s->sock)==-1)fprintf(stderr,"problème close sockListen : %s.\n",strerror(errno));
+  free(s->buffer);
 }
 
 
