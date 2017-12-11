@@ -531,10 +531,8 @@ void* getFileFromThatPeer(void* param){
     }
     filename[i]='\0';
     
+    printf("filename=%s\n",filename);
     
-    i=0;
-    while(p->file[i]!='\0'){++i;}   
-
     FILE* fileToReceive=fopen(filename,"w");//on ouvre en écriture le fichier que l'on va télécharger de ce serveur.
     if(fileToReceive==NULL){
       fprintf(stderr,"file failed to open %s : %s.\n",p->file,strerror(errno));

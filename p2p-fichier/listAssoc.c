@@ -197,7 +197,7 @@ struct listAssoc* getIndex_listAssoc_Aux(struct listAssoc* l,int index,int depth
       return l;
     }
     else{
-      return getIndex_listAssoc_Aux(l,index,depth+1);
+      return getIndex_listAssoc_Aux(l->next,index,depth+1);
     }
   }
 }
