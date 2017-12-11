@@ -5,6 +5,6 @@
 #define COMING '2'
 #define REFRESH '3'
 
-#define SIZE_BUFF 4096
+#define SIZE_BUFF 2048
 
 #endif

@@ -98,9 +98,6 @@ int main(int argc,char** argv){
   exit(EXIT_SUCCESS);
 }
 
-/* void getIP(sockaddr_in client,int s){ */
-  
-/* } */
 
 void sigINT_handler(int signo){
   if(signo == SIGINT){
@@ -153,13 +150,13 @@ struct listAssoc* treatQuery(int descClient,int q,struct listAssoc* list){
 }
 
 struct listAssoc* AddThatClient(int descClient,struct listAssoc* list){
-  buffer=malloc(sizeof(char)*SIZE_BUFF);
-
   char* ip=getClientIPString(descClient);
   printf("J'ajoute le client d'ip %s \n",ip);
-
+  
+  buffer=malloc(sizeof(char)*SIZE_BUFF);
   struct list* l=NULL;
   ssize_t res=1;
+  
   do{
     res=recv(descClient,buffer,SIZE_BUFF,0);
     if(-1==res){
@@ -198,7 +195,8 @@ char* getClientIPString(int descClient){
     fprintf(stderr,"getpeername failed : %s\n",strerror(errno));
   }
   char* ip=malloc(INET_ADDRSTRLEN*sizeof(char));/*seras free en meme temps que la liste*/
-  inet_ntop(AF_INET, &(client.sin_addr), ip, sizeof(char)*INET_ADDRSTRLEN);
+  if(NULL==inet_ntop(AF_INET, &(client.sin_addr), ip, sizeof(char)*INET_ADDRSTRLEN)){fprintf(stderr,"inet_ntop failed : %s \n",strerror(errno));}
+  
   return ip;
 }
 
@@ -219,7 +217,7 @@ void SendListToThatClient(int descClient,struct listAssoc* list){
 
     strcpy(buffer,list->k);
     printf("sending %s\n",buffer);
-    res1=send(descClient,buffer,SIZE_BUFF,0);//Reception du nom du ième pair
+    res1=send(descClient,buffer,SIZE_BUFF,0);//envoie du nom du ième pair
     if(-1==res1){
       fprintf(stderr,"problème send pair name, RefreshThatList : %s.\n",strerror(errno));
       free(buffer);
@@ -232,7 +230,7 @@ void SendListToThatClient(int descClient,struct listAssoc* list){
     while(t!=NULL){
       strcpy(buffer,t->v);
       printf("sending %s\n",buffer);
-      res2=send(descClient,buffer,SIZE_BUFF,0);//envoi du iième ieme pair
+      res2=send(descClient,buffer,SIZE_BUFF,0);//envoi du jeme fichier ieme pair
       if(-1==res2){
 	fprintf(stderr,"problème send fileName RefreshThatList : %s.\n",strerror(errno));
 	free(buffer);
@@ -244,7 +242,7 @@ void SendListToThatClient(int descClient,struct listAssoc* list){
     }
     
     buffer[0]='\0';
-    res1=send(descClient,buffer,SIZE_BUFF,0);//Envois du jieme fichier du ieme pair
+    res1=send(descClient,buffer,SIZE_BUFF,0);//fin fichier du ieme pair
     if(-1==res1){
       fprintf(stderr,"problème send fileName RefreshThatList : %s.\n",strerror(errno));
       free(buffer);
@@ -252,12 +250,13 @@ void SendListToThatClient(int descClient,struct listAssoc* list){
       close(descClient);
       exit(EXIT_FAILURE);
     }      
-
+    buffer[0]='1';
+    
     list=list->next;
   }
   
   buffer[0]='\0';
-  res1=send(descClient,buffer,SIZE_BUFF,0);//envois du signal de fin
+  res1=send(descClient,buffer,SIZE_BUFF,0);//envois du signal de fin du ieme pair
   if(-1==res1){
     fprintf(stderr,"problème send fileName RefreshThatList : %s.\n",strerror(errno));
     free(buffer);

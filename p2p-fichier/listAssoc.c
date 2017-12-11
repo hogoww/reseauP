@@ -96,6 +96,7 @@ struct list* getIndex_list(struct list* l,int index){
 struct listAssoc* make_ListAssoc(char* key){
   struct listAssoc* res=malloc(sizeof(struct listAssoc));
   res->k=key;
+  //printf("new key %s\n",res->k);
   res->l=NULL;
   res->next=NULL;
   return res;
@@ -215,7 +216,7 @@ struct listAssoc* destroyAndChangeList_listAssoc(struct listAssoc* l,char* key,s
   else{
     t=get_key_listAssoc(l,key);
   }
-  /* printf("%s\n",key); */
+  //printf("%s\n",key);
   /* DisplayList(li); */
   if(t->l){
     delete_list_and_values(t->l);
@@ -254,6 +255,7 @@ struct listAssoc* removeThatKey_listAssoc(struct listAssoc* l,char *key){
       if(t){
 	l->next=t->next;
       }
+      //printf("removing key = %s",l->k);
       delNode_listAssoc(t);
     }
     return res;

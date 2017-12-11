@@ -143,31 +143,38 @@ int main(int argc,char** argv){
       break;
     case 'c':
     case 'C':
-      printf("Entrez le numéro du pair correspondant à la liste.\n");
-      DisplayListAssoc(list);
-      scanf("%d",&numPeer);
-      fgetc(stdin);
-      if(NULL!=(peer=getIndex_listAssoc(list,numPeer))){
-	printf("Connection au pair %d = %s.\nQuel est le numero du fichier que vous souhaitez télécharger?\n",numPeer,peer->k);
-	DisplayList(peer->l);
-	int numfile;
-	scanf("%d",&numfile);
-	fgetc(stdin);
-	struct list* filename;
-	if((filename=getIndex_list(peer->l,numfile))!=NULL){
-	  
-	  struct dllFile* p=malloc(sizeof(struct dllFile*));
-	  p->adresse=peer->k;
-	  p->port=port+1;
-	  p->file=filename->v;
-	  getFileFromThatPeer((void*)p);/*pour ne pas etre au meme niveau que l'accés à l'annuaire*/
-	}
-	else{
-	  printf("\n Numéro de fichier invalide.\n");
-	}
+      if(!list){
+	printf("Il n'y a aucun pairs connus pour l'instant, Je vous refresh la liste!\n");
+	list=RefreshThatList(servAddress,port);
+	DisplayListAssoc(list);
       }
       else{
-	printf("Ce chiffre ne correspond pas à un pair.\n");
+	printf("Entrez le numéro du pair correspondant à la liste.\n");
+	DisplayListAssoc(list);
+	scanf("%d",&numPeer);
+	fgetc(stdin);
+	if(NULL!=(peer=getIndex_listAssoc(list,numPeer))){
+	  printf("Connection au pair %d = %s.\nQuel est le numero du fichier que vous souhaitez télécharger?\n",numPeer,peer->k);
+	  DisplayList(peer->l);
+	  int numfile;
+	  scanf("%d",&numfile);
+	  fgetc(stdin);
+	  struct list* filename;
+	  if((filename=getIndex_list(peer->l,numfile))!=NULL){
+	  
+	    struct dllFile* p=malloc(sizeof(struct dllFile*));
+	    p->adresse=peer->k;
+	    p->port=port+1;
+	    p->file=filename->v;
+	    getFileFromThatPeer((void*)p);/*pour ne pas etre au meme niveau que l'accés à l'annuaire*/
+	  }
+	  else{
+	    printf("\n Numéro de fichier invalide.\n");
+	  }
+	}
+	else{
+	  printf("Ce chiffre ne correspond pas à un pair.\n");
+	}
       }
       break;
     default:
@@ -188,6 +195,7 @@ int main(int argc,char** argv){
   IAMNOLONGERSERVER(sp);
   pthread_mutex_destroy(&(sp->m));
   free(sp);
+  free(query);
   
   printf("J'ai tout finis, bonne journée:)\n");
 
@@ -196,12 +204,8 @@ int main(int argc,char** argv){
 
 int ConnectToServ(char* servAddress,uint16_t port){
   int sock=socket(PF_INET,SOCK_STREAM,0);//création de la socket
-  if(sock==-1){
-    if(errno==ECONNREFUSED){
-      return -1;
-    }
-    else{fprintf(stderr,"Probleme ConnectToserv socket() : %s.\n",strerror(errno));exit(EXIT_FAILURE);}
-  }  
+  if(sock==-1){fprintf(stderr,"Probleme ConnectToserv socket() : %d %s.\n",errno,strerror(errno));exit(EXIT_FAILURE);}
+  
   struct sockaddr_in addr;//et remplissage des infos passé en ligne de commande.
   memset(&addr,0,sizeof(struct sockaddr));
   addr.sin_family=AF_INET;
@@ -215,9 +219,14 @@ int ConnectToServ(char* servAddress,uint16_t port){
   addr.sin_port=port;
 
   if(-1==connect(sock,(struct sockaddr*)&addr,sizeof(struct sockaddr))){//Connection au serveur
-    fprintf(stderr,"problème ConnectToServ Connect() : %s.\n",strerror(errno));
-    DisconnectFromServ(sock);
-    exit(EXIT_FAILURE);
+    if(errno==ECONNREFUSED){
+      return -1;
+    }
+    else{
+      fprintf(stderr,"problème ConnectToServ Connect() : %s.\n",strerror(errno));
+      DisconnectFromServ(sock);
+      exit(EXIT_FAILURE);
+    }
   }
   
   return sock;
@@ -265,7 +274,7 @@ int getIntFromServ(int serv){
 void DisAuServeurQueJeSuisPresent(char* servAddress,uint16_t port){
   int serv=ConnectToServ(servAddress,port);
   if(serv==-1){
-    fprintf(stderr,"Serveur non accessible. Verifier qu'il soit allumé, et que sont adresse/port soient corrects");
+    fprintf(stderr,"Serveur non accessible. Verifier qu'il soit allumé, et que sont adresse/port soient corrects\n");
     exit(EXIT_FAILURE);
   }
 	       
@@ -284,7 +293,7 @@ void DisAuServeurQueJeSuisPresent(char* servAddress,uint16_t port){
       int end=LookForEnd(dir->d_name,256);
       char* r=ConvertBracketToStar(dir->d_name,end,256);
       strcpy(buffer,r);
-      printf("sending %s\n",buffer);
+      //printf("sending %s\n",buffer);
       ssize_t res=send(serv,buffer,SIZE_BUFF,0);//Envois du nom du fichier au serveur.
       
       if(-1==res){
@@ -396,9 +405,12 @@ struct listAssoc* RefreshThatList(char* servAddress,uint16_t port){/*Not the mos
       exit(EXIT_FAILURE);
     }
     
-    if(res1==0 || buffer[0]=='\0'){
+    printf("peer name %zu\n",res1);
+    if(buffer[0]=='\0'){
+      printf("received fin des pair buffer[0]\n");
       break;
     }
+    printf("%s",buffer);
 
     char* ip=resize(buffer,SIZE_BUFF);
     printf("ip=%s\n",ip);
@@ -417,11 +429,12 @@ struct listAssoc* RefreshThatList(char* servAddress,uint16_t port){/*Not the mos
 	DisconnectFromServ(serv);
 	exit(EXIT_FAILURE);
       }
-      
-      if(res2==0 || buffer[0]=='\0'){
+
+      printf("peer file %zu",res2);
+      if(buffer[0]=='\0'){
+	printf("received fin des fichiers des pair buffer[0]\n");
 	break;
-      }
-      
+      }      
       printf("recv filename %s\n",buffer);
       char* fileName=resize(buffer,SIZE_BUFF);
       lt=add_value_list(lt,fileName);
@@ -526,7 +539,7 @@ void* getFileFromThatPeer(void* param){
     int i=10;
     j=0;
     while(p->file[j]!='\0'){
-      filename[i]=buffer[j];
+      filename[i]=p->file[j];
       ++i;++j;
     }
     filename[i]='\0';
@@ -535,7 +548,7 @@ void* getFileFromThatPeer(void* param){
     
     FILE* fileToReceive=fopen(filename,"w");//on ouvre en écriture le fichier que l'on va télécharger de ce serveur.
     if(fileToReceive==NULL){
-      fprintf(stderr,"file failed to open %s : %s.\n",p->file,strerror(errno));
+      fprintf(stderr,"N'as pas pu ouvrir le fichier %s : %s.\n",p->file,strerror(errno));
       DisconnectFromServ(serv);
       free(buffer);
       free(filename);
@@ -621,6 +634,7 @@ void* IAMSERVEURNOW(void* param){
   int x;
   while(1){
     if(*(p->compteur)>p->maxSend){
+      printf("Il y a trop de monde, j'attends qu'un envoie se finisse !\n");
       getOneThread(p);
     }
     
@@ -629,7 +643,7 @@ void* IAMSERVEURNOW(void* param){
     
     getThreads(p,IPC_NOWAIT);//On verifie si certains thread on finis de bosser, pour éviter de trop flood
     
-    printf("accept %d \n",x); 
+    printf("accept %d \n",x);
     struct sendpart *s=malloc(sizeof(struct sendpart));
     s->sock=x;
     s->msgid=p->msgid;
