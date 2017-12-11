@@ -134,7 +134,7 @@ struct listAssoc* treatQuery(int descClient,int q,struct listAssoc* list){
     printf("removing %s\n",ip);
     list=RemoveThatClient(descClient,list);
     free(ip);
-    //DisplayListAssoc(list);
+    DisplayListAssoc(list);
     break;
   case COMING:
     list=AddThatClient(descClient,list);

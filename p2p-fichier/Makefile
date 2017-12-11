@@ -1,4 +1,4 @@
-FLAGS = -Wall 
+FLAGS = -Wall
 POSTFLAGS= -lpthread
 all:
 	gcc $(FLAGS) -c	listAssoc.c $(POSTFLAGS)
