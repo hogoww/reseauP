@@ -182,7 +182,7 @@ int main(int argc,char** argv){
 	  struct list* filename;
 	  if((filename=getIndex_list(peer->l,numfile))!=NULL){
 	  
-	    struct dllFile* p=malloc(sizeof(struct dllFile*));
+	    struct dllFile* p=malloc(sizeof(struct dllFile));
 	    p->adresse=peer->k;
 	    p->port=port+1;
 	    p->file=filename->v;
@@ -301,8 +301,7 @@ int getIntFromServ(int serv){
 void DisAuServeurQueJeSuisPresent(char* servAddress,uint16_t port){
   int serv=ConnectToServ(servAddress,port);
   if(serv==-1){
-    fprintf(stderr,"Serveur non accessible. Verifier qu'il soit allumé, et que sont adresse/port soient corrects\n");
-    exit(EXIT_FAILURE);
+    fprintf(stderr,"Serveur non accessible. Verifier qu'il soit allumé, et que sont adresse/port soient corrects\nJe m'éteins quand meme proprement.\n");
   }
 	       
   
