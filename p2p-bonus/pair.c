@@ -186,7 +186,7 @@ int main(int argc,char** argv){
 	    p->adresse=peer->k;
 	    p->port=port+1;
 	    p->file=filename->v;
-	    
+	    p->msgid=dll_thread_collector->msgid;
 	    pthread_t t;/*don't need to keep it*/
 	    pthread_create(&t,NULL,getFileFromThatPeer,(void*)p);/*pour ne pas etre au meme niveau que l'accés à l'annuaire*/
 	  }
@@ -436,7 +436,7 @@ struct listAssoc* RefreshThatList(char* servAddress,uint16_t port){/*Not the mos
     }
 
     char* ip=resize(buffer,SIZE_BUFF);
-
+ 
     if(!list){
       list=make_ListAssoc(ip);
     }
