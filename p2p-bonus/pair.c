@@ -221,6 +221,7 @@ int main(int argc,char** argv){
   
   getThreads(dll_thread_collector,0);
   if(-1==msgctl(dll_thread_collector->msgid,IPC_RMID,NULL)){fprintf(stderr,"Probleme en essayant de détruire la file de message : %s",strerror(errno));}
+  pthread_mutex_destroy(&(sp->m));
   free(dll_thread_collector->compteur);
   free(dll_thread_collector);
 
@@ -369,7 +370,7 @@ void QueryTypeServ(int serv,char type){
 void DisAuServeurQueJeQuitte(char* servAddress,uint16_t port){
   int serv=ConnectToServ(servAddress,port);
   if(serv==-1){
-    fprintf(stderr,"Serveur non accessible. Verifier qu'il soit allumé, et que sont adresse/port soient corrects");
+    fprintf(stderr,"Serveur non accessible. Verifier qu'il soit allumé, et que sont adresse/port soient corrects\n");
     exit(EXIT_FAILURE);
   }
   
@@ -638,8 +639,8 @@ void getThreads(struct servParam* s,int waitflag){
     
     pthread_mutex_lock(&(s->m));
     pthread_join(buff.pid,NULL);
-    printf("J'ai attrapé un thread qui a finis ! état compteur = %d\n",*(s->compteur));
     *(s->compteur)-=1;
+    printf("J'ai attrapé un thread qui a finis ! état compteur = %d\n",*(s->compteur));
     pthread_mutex_unlock(&(s->m));
   }
 }
@@ -651,28 +652,28 @@ void getOneThread(struct servParam* s){
   pthread_join(buff.pid,NULL);
   *(s->compteur)-=1;
   pthread_mutex_unlock(&(s->m));
+  
 }
 
 void* IAMSERVEURNOW(void* param){
   struct servParam* p=(struct servParam*)param;
   pthread_t t;/*don't need it with that algorithm*/
-  int x;
   while(1){
     if(*(p->compteur)>p->maxSend){
       printf("Il y a trop de monde, j'attends qu'un envoie se finisse !\n");
       getOneThread(p);
     }
-    
-    if(-1==(x=accept(p->sock,NULL,NULL)))
-      fprintf(stderr,"Accept failed : %d - %s.\n",errno,strerror(errno));
+
+    struct sendpart *s=malloc(sizeof(struct sendpart));
+    if(s==NULL){
+      fprintf(stderr,"error malloc\n");
+    }
+    s->sock=accept(p->sock,NULL,NULL);
+    if(s->sock==-1){fprintf(stderr,"Accept failed : %d - %s.\n",errno,strerror(errno));}
+      
     
     getThreads(p,IPC_NOWAIT);//On verifie si certains thread on finis de bosser, pour éviter de trop flood
-    
-    printf("accept %d \n",x);
-    struct sendpart *s=malloc(sizeof(struct sendpart));
-    s->sock=x;
     s->msgid=p->msgid;
-
     pthread_mutex_lock(&(p->m));
     pthread_create(&t,NULL,sendfile,(void*)s);
     *(p->compteur)+=1;
@@ -806,9 +807,9 @@ void* sendfile(void* param){
 
     fclose(fileToSend);
     printf("done sending a file.\n");
-    close(descClient);
   }
 
+  close(descClient);
   free(buffer);
   free(filename);
 

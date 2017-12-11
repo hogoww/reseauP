@@ -162,7 +162,7 @@ int main(int argc,char** argv){
 	  struct list* filename;
 	  if((filename=getIndex_list(peer->l,numfile))!=NULL){
 	  
-	    struct dllFile* p=malloc(sizeof(struct dllFile*));
+	    struct dllFile* p=malloc(sizeof(struct dllFile));
 	    p->adresse=peer->k;
 	    p->port=port+1;
 	    p->file=filename->v;
